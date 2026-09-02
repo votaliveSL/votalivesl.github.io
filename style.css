@@ -401,7 +401,7 @@ body.display-body{
   background-image:url('header-processo-ai.png');
   background-repeat:no-repeat;
   background-position:left center;
-  background-size:auto 100%;
+  background-size:auto 92%;
   border-radius:16px;
   margin:0 auto clamp(5px,.8dvh,10px);
 }
@@ -542,7 +542,7 @@ body.display-body{
 /* v7.4 - Word Cloud leggermente più compatta */
 .display-cloud-word{padding:.04em .08em}
 
-/* === VotaLiveSL v7.5: domanda bianca dentro il banner blu === */
+/* === VotaLiveSL v7.6: domanda bianca + sola bilancia ufficiale nel banner === */
 .display-logo{
   position:relative;
   display:flex;
@@ -554,8 +554,8 @@ body.display-body{
   background-color:#011a2b;
   background-image:url('header-display-bilancia.png');
   background-repeat:no-repeat;
-  background-position:right center;
-  background-size:auto 100%;
+  background-position:calc(100% - 18px) center;
+  background-size:auto 92%;
   border-radius:16px;
   margin:0 auto clamp(7px,1dvh,12px);
   overflow:hidden;
@@ -565,7 +565,7 @@ body.display-body{
   position:absolute;
   inset:0;
   pointer-events:none;
-  background:linear-gradient(90deg,rgba(1,26,43,.98) 0%,rgba(1,26,43,.94) 45%,rgba(1,26,43,.36) 68%,rgba(1,26,43,0) 82%);
+  background:linear-gradient(90deg,rgba(1,26,43,.98) 0%,rgba(1,26,43,.94) 45%,rgba(1,26,43,.70) 58%,rgba(1,26,43,.18) 72%,rgba(1,26,43,0) 82%);
 }
 .display-question-banner{
   position:relative;
