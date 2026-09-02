@@ -541,3 +541,58 @@ body.display-body{
 
 /* v7.4 - Word Cloud leggermente più compatta */
 .display-cloud-word{padding:.04em .08em}
+
+/* === VotaLiveSL v7.5: domanda bianca dentro il banner blu === */
+.display-logo{
+  position:relative;
+  display:flex;
+  align-items:center;
+  width:100%;
+  height:clamp(120px,21dvh,205px);
+  flex:0 0 auto;
+  padding:clamp(14px,2.2vh,26px) clamp(18px,2.8vw,44px);
+  background-color:#011a2b;
+  background-image:url('header-display-bilancia.png');
+  background-repeat:no-repeat;
+  background-position:right center;
+  background-size:auto 100%;
+  border-radius:16px;
+  margin:0 auto clamp(7px,1dvh,12px);
+  overflow:hidden;
+}
+.display-logo::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(90deg,rgba(1,26,43,.98) 0%,rgba(1,26,43,.94) 45%,rgba(1,26,43,.36) 68%,rgba(1,26,43,0) 82%);
+}
+.display-question-banner{
+  position:relative;
+  z-index:1;
+  width:min(68%,1050px);
+  max-width:none;
+  margin:0;
+  text-align:left;
+  color:#fff;
+  font-size:clamp(1.55rem,3vw,3.9rem);
+  line-height:1.03;
+  letter-spacing:-.025em;
+  text-shadow:0 2px 10px rgba(0,0,0,.28);
+}
+.show-results .display-question-banner,
+.cloud-mode .display-question-banner,
+.holding .display-question-banner{
+  font-size:clamp(1.55rem,3vw,3.9rem);
+}
+#displayState{
+  padding-top:clamp(2px,.4dvh,6px);
+}
+.cloud-mode .display-message,
+.show-results .display-message{
+  margin-top:0;
+}
+@media (max-aspect-ratio:4/3){
+  .display-logo{height:clamp(110px,19dvh,180px);background-size:auto 92%;}
+  .display-question-banner{width:64%;font-size:clamp(1.25rem,2.7vw,3rem)}
+}
