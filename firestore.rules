@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sessions/{sessionId} {
+      allow read: if true;
+      // Versione demo: consente scrittura pubblica.
+      // Prima dell'evento va sostituita con regole più restrittive.
+      allow write: if true;
+    }
+  }
+}
