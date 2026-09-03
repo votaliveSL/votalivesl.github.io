@@ -138,12 +138,44 @@ function subscribeCloud(roundId) {
   });
 }
 
+let cloudRenderToken = 0;
+
 function renderCloud(arr) {
+  const token = ++cloudRenderToken;
   results.innerHTML = '<div class="display-cloud diamond-cloud" id="displayCloud"></div>';
-  const cloud = document.getElementById('displayCloud');
-  const bounds = cloud.getBoundingClientRect();
-  const W = Math.max(420, bounds.width);
-  const H = Math.max(280, bounds.height);
+
+  // Il contenitore della nuvola viene creato nello stesso ciclo in cui cambia
+  // la modalità del display. In alcuni browser/monitor il primo layout non è
+  // ancora assestato e getBoundingClientRect() può restituire 0 (o valori
+  // troppo piccoli). In quel caso la vecchia versione costruiva la nuvola in
+  // un'area fittizia 420x280: ecco perché alcune parole, anche frequenti,
+  // sparivano mentre altre restavano visibili.
+  // Attendiamo quindi il layout reale prima di iniziare il posizionamento.
+  const waitForRealSize = (attempt = 0) => {
+    if (token !== cloudRenderToken) return;
+    const cloud = document.getElementById('displayCloud');
+    if (!cloud) return;
+    const r = cloud.getBoundingClientRect();
+    const parent = results.getBoundingClientRect();
+    const W = Math.max(r.width, cloud.clientWidth, parent.width);
+    const H = Math.max(r.height, cloud.clientHeight, parent.height);
+
+    // Su uno schermo di proiezione la zona utile è molto più grande di questi
+    // valori; se non lo è ancora aspettiamo un altro frame (max ~0,3 s).
+    if ((W < 700 || H < 300) && attempt < 20) {
+      requestAnimationFrame(() => waitForRealSize(attempt + 1));
+      return;
+    }
+    placeCloudWords(arr, cloud, Math.max(420, W), Math.max(280, H), token);
+  };
+
+  requestAnimationFrame(() => requestAnimationFrame(() => waitForRealSize(0)));
+}
+
+function placeCloudWords(arr, cloud, W, H, token) {
+  if (token !== cloudRenderToken || !cloud.isConnected) return;
+  cloud.innerHTML = '';
+
   const cx = W / 2;
   const cy = H / 2;
   const placed = [];
@@ -154,27 +186,25 @@ function renderCloud(arr) {
   const halfW = W / 2 - marginX;
   const halfH = H / 2 - marginY;
 
-  // Candidati ordinati dal centro verso l'esterno secondo distanza "a rombo".
-  // Una griglia fitta consente di compattare le parole senza produrre righe regolari.
+  // Candidati dal centro verso l'esterno secondo distanza a rombo.
+  // La griglia è volutamente fitta: la priorità è mostrare TUTTE le parole.
   const candidates = [{x:cx,y:cy,d:0}];
-  const step = Math.max(8, Math.min(16, base * .020));
+  const step = Math.max(6, Math.min(12, base * .014));
   for (let y = marginY; y <= H - marginY; y += step) {
     for (let x = marginX; x <= W - marginX; x += step) {
       const nx = Math.abs(x - cx) / halfW;
       const ny = Math.abs(y - cy) / halfH;
       const d = nx + ny;
-      if (d <= 1.02) candidates.push({x,y,d});
+      if (d <= 1.035) candidates.push({x,y,d});
     }
   }
-  // Piccola variazione deterministica per evitare l'effetto "griglia".
   candidates.sort((a,b) => (a.d-b.d) || (((a.x*17+a.y*31)%97)-((b.x*17+b.y*31)%97)));
 
-  const overlaps = (a,b,pad=4) => !(
+  const overlaps = (a,b,pad=3) => !(
     a.r + pad < b.l || a.l - pad > b.r || a.b + pad < b.t || a.t - pad > b.b
   );
 
-  function insideDiamond(box, slack=1.02) {
-    // Considera l'ingombro dell'intera parola, non soltanto il suo centro.
+  function insideDiamond(box, slack=1.035) {
     const ccx = (box.l + box.r) / 2;
     const ccy = (box.t + box.b) / 2;
     const bw = box.r - box.l;
@@ -183,25 +213,24 @@ function renderCloud(arr) {
     return projected <= slack && box.l >= marginX && box.r <= W-marginX && box.t >= marginY && box.b <= H-marginY;
   }
 
-  const items = arr.slice(0, 90).map((x, i) => {
+  // Nessun taglio arbitrario: con 100-200 persone possono comunque esserci
+  // molte parole distinte, e quelle meno frequenti devono restare visibili.
+  const items = arr.map((x, i) => {
     const ratio = Math.max(.01, x.count / maxCount);
-    // Frequenza ben percepibile: le parole dominanti restano chiaramente più grandi.
     const score = Math.pow(ratio, .70);
-    const minPx = Math.max(15, base * .027);
-    const maxPx = Math.max(76, Math.min(154, base * .225));
+    const minPx = Math.max(13, base * .021);
+    const maxPx = Math.max(72, Math.min(150, base * .21));
     let fontPx = minPx + (maxPx - minPx) * score;
     if (i > 24) fontPx *= .90;
-    if (i > 48) fontPx *= .86;
+    if (i > 48) fontPx *= .84;
+    if (i > 80) fontPx *= .78;
 
     const el = document.createElement('span');
     el.className = `display-cloud-word rank-${Math.min(i,7)}`;
     el.textContent = x.label;
     el.title = `${x.count}`;
-
-    // Solo poche parole periferiche verticali: circa 10–12%, mai tra le principali.
     const rotate = i >= 9 && i % 9 === 7 && x.label.length <= 11;
     if (rotate) el.classList.add('vertical');
-
     el.style.fontSize = `${fontPx}px`;
     el.style.position = 'absolute';
     el.style.visibility = 'hidden';
@@ -214,72 +243,63 @@ function renderCloud(arr) {
   items.forEach(({el,i,rotate}) => {
     let fontSize = parseFloat(el.style.fontSize);
     let best = null;
+    const initialRankLimit = i === 0 ? .08 : Math.min(.78, .20 + Math.sqrt(i) * .095);
 
-    // Le parole sono già ordinate per frequenza decrescente.
-    // La priorità quindi resta assoluta: prima tentiamo a lungo di collocare
-    // una parola frequente, anche allargando progressivamente la sua zona,
-    // e solo dopo passiamo alla successiva.
-    const initialRankLimit = i === 0 ? .08 : Math.min(.78, .24 + Math.sqrt(i) * .105);
-
-    for (let shrink=0; shrink<18 && !best; shrink++) {
+    // Prima viene collocata la parola più frequente, poi la successiva, ecc.
+    // Se non trova posto riduciamo la dimensione fino a 10 px e allarghiamo
+    // la ricerca a tutta la losanga, senza passare prematuramente alle parole
+    // meno frequenti.
+    for (let shrink=0; shrink<28 && !best; shrink++) {
       if (shrink) {
-        fontSize *= .92;
-        el.style.fontSize = `${Math.max(12,fontSize)}px`;
+        fontSize = Math.max(10, fontSize * .93);
+        el.style.fontSize = `${fontSize}px`;
       }
       const ew = el.offsetWidth;
       const eh = el.offsetHeight;
       const visualW = rotate ? eh : ew;
       const visualH = rotate ? ew : eh;
-
-      // Se il centro è occupato, non scartiamo la parola: allarghiamo
-      // gradualmente la ricerca fino a tutta la losanga. Questo evita che
-      // parole con 2+ voti spariscano mentre restano visibili parole da 1 voto.
-      const rankLimit = Math.min(1.02, initialRankLimit + shrink * .075);
+      const rankLimit = Math.min(1.035, initialRankLimit + shrink * .055);
 
       for (const c of candidates) {
         if (c.d > rankLimit) break;
         const box = {
-          l:c.x-visualW/2,
-          t:c.y-visualH/2,
-          r:c.x+visualW/2,
-          b:c.y+visualH/2
+          l:c.x-visualW/2, t:c.y-visualH/2,
+          r:c.x+visualW/2, b:c.y+visualH/2
         };
-        if (!insideDiamond(box, 1.025)) continue;
-        const pad = i < 8 ? Math.max(2, 5 - Math.floor(shrink/5)) : 2;
+        if (!insideDiamond(box)) continue;
+        const pad = shrink > 18 ? 0 : (i < 8 ? 2 : 1);
         if (!placed.every(p => !overlaps(box,p,pad))) continue;
         best = {box, centerX:c.x, centerY:c.y, ew, eh};
         break;
       }
     }
 
+    // Ultimo tentativo: carattere minimo, nessuna spaziatura tra box.
     if (!best) {
-      // Ultimo tentativo a dimensione minima su tutta la losanga.
-      // In questo modo il mancato inserimento diventa davvero eccezionale.
-      el.style.fontSize = '12px';
+      el.style.fontSize = '10px';
       const ew = el.offsetWidth;
       const eh = el.offsetHeight;
       const visualW = rotate ? eh : ew;
       const visualH = rotate ? ew : eh;
       for (const c of candidates) {
         const box = {
-          l:c.x-visualW/2,
-          t:c.y-visualH/2,
-          r:c.x+visualW/2,
-          b:c.y+visualH/2
+          l:c.x-visualW/2, t:c.y-visualH/2,
+          r:c.x+visualW/2, b:c.y+visualH/2
         };
-        if (!insideDiamond(box, 1.025)) continue;
-        if (!placed.every(p => !overlaps(box,p,1))) continue;
+        if (!insideDiamond(box, 1.04)) continue;
+        if (!placed.every(p => !overlaps(box,p,0))) continue;
         best = {box, centerX:c.x, centerY:c.y, ew, eh};
         break;
       }
     }
 
     if (!best) {
+      // Con un display normale questo dovrebbe accadere solo con centinaia di
+      // parole molto lunghe; non influenza mai la precedenza per frequenza.
       el.remove();
       return;
     }
 
-    // Il centro visuale resta quello scelto anche per le poche parole ruotate.
     el.style.left = `${best.centerX - best.ew/2}px`;
     el.style.top = `${best.centerY - best.eh/2}px`;
     el.style.visibility = 'visible';
