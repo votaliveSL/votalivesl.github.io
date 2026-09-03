@@ -176,36 +176,28 @@ function placeCloudWords(arr, cloud, W, H, token) {
   if (token !== cloudRenderToken || !cloud.isConnected) return;
   cloud.innerHTML = '';
 
+  // Usa ESCLUSIVAMENTE le dimensioni effettive della nuvola: in questo modo
+  // il centro geometrico usato dal calcolo coincide sempre con il centro
+  // visibile del contenitore sul proiettore.
+  W = cloud.clientWidth || W;
+  H = cloud.clientHeight || H;
   const cx = W / 2;
   const cy = H / 2;
   const maxCount = Math.max(1, ...arr.map(x => x.count));
   const base = Math.min(W, H);
-  const marginX = Math.max(18, W * .018);
-  const marginY = Math.max(14, H * .025);
-  const halfW = W / 2 - marginX;
-  const halfH = H / 2 - marginY;
-
-  // Griglia a rombo, ordinata SEMPRE dal centro verso l'esterno.
-  // La posizione non dipende dalla lunghezza della parola o dal suo numero
-  // di voti: la priorità è determinata esclusivamente dall'ordine di arr,
-  // che è già ordinato per frequenza decrescente.
-  const candidates = [{x:cx, y:cy, d:0}];
-  const step = Math.max(5, Math.min(10, base * .011));
-  for (let y = marginY; y <= H - marginY; y += step) {
-    for (let x = marginX; x <= W - marginX; x += step) {
-      const d = Math.abs(x - cx) / halfW + Math.abs(y - cy) / halfH;
-      if (d <= .985) candidates.push({x,y,d});
-    }
-  }
-  candidates.sort((a,b) => (a.d-b.d) || (((a.x*19+a.y*37)%101)-((b.x*19+b.y*37)%101)));
+  const marginX = Math.max(24, W * .025);
+  const marginY = Math.max(20, H * .035);
+  const halfW = Math.max(1, W / 2 - marginX);
+  const halfH = Math.max(1, H / 2 - marginY);
 
   const items = arr.map((x, i) => {
     const ratio = x.count / maxCount;
     const score = Math.pow(ratio, .72);
-    const minPx = Math.max(15, base * .024);
-    const maxPx = Math.max(64, Math.min(142, base * .19));
+    const minPx = Math.max(18, base * .030);
+    const maxPx = Math.max(70, Math.min(150, base * .18));
     const naturalPx = minPx + (maxPx - minPx) * score;
-    const rotate = i >= 10 && i % 9 === 7 && x.label.length <= 11;
+    // Rotazioni solo per parole periferiche quando la nuvola è davvero ricca.
+    const rotate = arr.length >= 12 && i >= 9 && i % 8 === 7 && x.label.length <= 10;
 
     const el = document.createElement('span');
     el.className = `display-cloud-word rank-${Math.min(i,7)}${rotate ? ' vertical' : ''}`;
@@ -215,52 +207,79 @@ function placeCloudWords(arr, cloud, W, H, token) {
     el.style.visibility = 'hidden';
     el.style.left = '0px';
     el.style.top = '0px';
+    el.style.margin = '0';
+    el.style.padding = '0';
+    // Durante il calcolo niente animazioni/trasformazioni: misuriamo il testo
+    // reale, non una sua versione scalata dall'animazione CSS.
+    el.style.animation = 'none';
+    if (!rotate) el.style.transform = 'none';
     cloud.appendChild(el);
     return {el, x, i, rotate, naturalPx};
   });
 
-  const overlaps = (a,b,pad=2) => !(
-    a.r + pad < b.l || a.l - pad > b.r || a.b + pad < b.t || a.t - pad > b.b
+  const boxesOverlap = (a, b, pad) => !(
+    a.r + pad <= b.l || a.l - pad >= b.r ||
+    a.b + pad <= b.t || a.t - pad >= b.b
   );
 
-  function insideDiamond(box, slack=.995) {
-    const ccx = (box.l + box.r) / 2;
-    const ccy = (box.t + box.b) / 2;
-    const bw = box.r - box.l;
-    const bh = box.b - box.t;
-    const projected = Math.abs(ccx-cx)/halfW + Math.abs(ccy-cy)/halfH + (bw/2)/halfW + (bh/2)/halfH;
-    return projected <= slack && box.l >= marginX && box.r <= W-marginX && box.t >= marginY && box.b <= H-marginY;
+  // Controlla tutti e quattro gli angoli rispetto al rombo. È più rigoroso
+  // del vecchio controllo sul solo centro e impedisce sovrapposizioni visive.
+  function insideDiamond(box) {
+    if (box.l < marginX || box.r > W-marginX || box.t < marginY || box.b > H-marginY) return false;
+    const corners = [
+      [box.l,box.t],[box.r,box.t],[box.l,box.b],[box.r,box.b]
+    ];
+    return corners.every(([x,y]) => Math.abs(x-cx)/halfW + Math.abs(y-cy)/halfH <= .985);
   }
 
-  function tryLayout(globalScale) {
+  // Spirale ellittica dal centro: produce una nuvola compatta, simmetrica e
+  // soprattutto non dipende dall'ordine casuale dei punti di una griglia.
+  function makeCandidates(stepPx) {
+    const pts = [{x:cx,y:cy}];
+    const maxR = Math.hypot(halfW, halfH);
+    for (let r = stepPx; r <= maxR; r += stepPx) {
+      const n = Math.max(18, Math.round((2*Math.PI*r)/stepPx));
+      for (let k=0;k<n;k++) {
+        const a = (k/n)*Math.PI*2;
+        // leggermente più largo che alto = rombo morbido sul proiettore
+        const x = cx + Math.cos(a)*r;
+        const y = cy + Math.sin(a)*r*.72;
+        if (x >= marginX && x <= W-marginX && y >= marginY && y <= H-marginY) {
+          const d = Math.abs(x-cx)/halfW + Math.abs(y-cy)/halfH;
+          if (d <= .97) pts.push({x,y});
+        }
+      }
+    }
+    return pts;
+  }
+  const candidates = makeCandidates(Math.max(7, Math.min(14, base*.014)));
+
+  function attempt(globalScale) {
     const placed = [];
     const positions = [];
 
     for (const item of items) {
-      // Riduzione globale: se anche UNA sola parola non entra, l'intera
-      // nuvola viene ricalcolata un po' più piccola. In questo modo non può
-      // accadere che una parola meno frequente resti visibile mentre una più
-      // frequente venga scartata per una collisione casuale.
-      const fontPx = Math.max(11, item.naturalPx * globalScale);
+      const fontPx = Math.max(12, item.naturalPx * globalScale);
       item.el.style.fontSize = `${fontPx}px`;
-      const ew = item.el.offsetWidth;
-      const eh = item.el.offsetHeight;
+      // Forza il layout dopo il cambio dimensione prima della misura.
+      const ew = Math.ceil(item.el.getBoundingClientRect().width);
+      const eh = Math.ceil(item.el.getBoundingClientRect().height);
       const visualW = item.rotate ? eh : ew;
       const visualH = item.rotate ? ew : eh;
       let found = null;
 
+      // Spazio reale fra parole: evita l'effetto 'lettere che si toccano'.
+      const pad = Math.max(7, Math.round(fontPx*.09));
       for (const c of candidates) {
         const box = {
           l:c.x-visualW/2, t:c.y-visualH/2,
           r:c.x+visualW/2, b:c.y+visualH/2
         };
         if (!insideDiamond(box)) continue;
-        const pad = item.i < 8 ? 3 : 1;
-        if (placed.some(p => overlaps(box,p,pad))) continue;
+        if (placed.some(p => boxesOverlap(box,p,pad))) continue;
         found = {box, left:c.x-ew/2, top:c.y-eh/2};
         break;
       }
-
       if (!found) return null;
       placed.push(found.box);
       positions.push(found);
@@ -268,61 +287,39 @@ function placeCloudWords(arr, cloud, W, H, token) {
     return positions;
   }
 
-  // Prima tentiamo le dimensioni naturali. Se la disposizione non contiene
-  // TUTTE le parole, ricalcoliamo da zero riducendo uniformemente la nuvola.
+  // Se tutte non entrano, si ridimensiona l'INTERA nuvola e si ricalcola da
+  // zero. Nessuna parola viene mai sovrapposta o sacrificata.
   let positions = null;
-  const scales = [1,.94,.88,.82,.76,.70,.64,.58,.52,.46,.40,.34,.28,.22];
+  const scales = [1,.94,.88,.82,.76,.70,.64,.58,.52,.46,.40,.34,.28,.24,.20];
   for (const scale of scales) {
-    positions = tryLayout(scale);
+    positions = attempt(scale);
     if (positions) break;
   }
 
-  // Fallback estremo: deve comparire ogni parola. Con dimensione minima
-  // ripetiamo il posizionamento su una griglia ancora più fitta e con margine
-  // di collisione nullo. È preferibile una nuvola più compatta a una parola
-  // mancante.
+  // Fallback garantito per quantità eccezionali: griglia centrata e ordinata,
+  // senza sovrapposizioni. Normalmente non viene mai raggiunto.
   if (!positions) {
-    const placed = [];
-    positions = [];
-    for (const item of items) {
-      item.el.style.fontSize = '10px';
-      const ew = item.el.offsetWidth;
-      const eh = item.el.offsetHeight;
-      const visualW = item.rotate ? eh : ew;
-      const visualH = item.rotate ? ew : eh;
-      let found = null;
-      for (const c of candidates) {
-        const box = {l:c.x-visualW/2,t:c.y-visualH/2,r:c.x+visualW/2,b:c.y+visualH/2};
-        if (!insideDiamond(box,1.01)) continue;
-        if (placed.some(p => overlaps(box,p,0))) continue;
-        found = {box,left:c.x-ew/2,top:c.y-eh/2};
-        break;
-      }
-      if (!found) {
-        // Ultima garanzia: non rimuovere mai la parola. La disponiamo lungo
-        // il bordo inferiore in carattere minimo; questo caso riguarda solo
-        // quantità eccezionali di parole distinte.
-        const slot = positions.length;
-        const cols = Math.max(1, Math.floor((W - 2*marginX) / Math.max(70, ew + 4)));
-        const row = Math.floor(slot / cols);
-        const col = slot % cols;
-        found = {
-          box:{l:marginX + col*((W-2*marginX)/cols), t:H-marginY-12-row*12, r:marginX + (col+1)*((W-2*marginX)/cols), b:H-marginY-row*12},
-          left:marginX + col*((W-2*marginX)/cols),
-          top:H-marginY-12-row*12
-        };
-      }
-      placed.push(found.box);
-      positions.push(found);
-    }
+    const cols = Math.max(2, Math.ceil(Math.sqrt(items.length * W/H)));
+    const rows = Math.ceil(items.length/cols);
+    const cellW = (W-2*marginX)/cols;
+    const cellH = (H-2*marginY)/rows;
+    positions = items.map((item,i) => {
+      item.el.style.fontSize = `${Math.max(11, Math.min(cellH*.32, cellW/(Math.max(4,item.x.label.length)*.58)))}px`;
+      const ew = Math.ceil(item.el.getBoundingClientRect().width);
+      const eh = Math.ceil(item.el.getBoundingClientRect().height);
+      const col=i%cols, row=Math.floor(i/cols);
+      const x=marginX+cellW*(col+.5), y=marginY+cellH*(row+.5);
+      return {left:x-ew/2, top:y-eh/2, box:{l:x-ew/2,t:y-eh/2,r:x+ew/2,b:y+eh/2}};
+    });
   }
 
   items.forEach((item,i) => {
     const pos = positions[i];
-    item.el.style.left = `${pos.left}px`;
-    item.el.style.top = `${pos.top}px`;
+    item.el.style.left = `${Math.round(pos.left)}px`;
+    item.el.style.top = `${Math.round(pos.top)}px`;
     item.el.style.visibility = 'visible';
-    item.el.style.animationDelay = `${Math.min(i*18,300)}ms`;
+    // Riattiva solo la trasformazione necessaria alle rare parole verticali.
+    if (item.rotate) item.el.style.transform = 'rotate(90deg)';
   });
 }
 
