@@ -12,6 +12,7 @@ let activeCloudRound = null;
 let unsubAgenda = null;
 let agendaItems = [];
 let selectedAgendaId = null;
+let currentSessionData = null;
 const sessionRef = () => doc(db,'sessions',currentSession);
 const roundRef = roundId => doc(db,'sessions',currentSession,'rounds',roundId);
 const roundsRef = () => collection(db,'sessions',currentSession,'rounds');
@@ -37,6 +38,7 @@ function subscribe() {
   unsub = onSnapshot(sessionRef(), async snap => {
     if (!snap.exists()) return render(null,[]);
     const d = snap.data();
+    currentSessionData = d;
     q('questionInput').value = d.question || '';
     q('typeInput').value = d.type || 'choice';
     typeUI();
@@ -47,6 +49,7 @@ function subscribe() {
       if (unsubWords) { unsubWords(); unsubWords = null; activeCloudRound = null; }
       render(d,[]);
     }
+    renderAgenda();
   });
 
   unsubHistory = onSnapshot(roundsRef(), snap => {
@@ -86,7 +89,7 @@ async function saveDraft() {
   },{merge:true});
 }
 
-async function openRound() {
+async function openRound(agendaId=null) {
   const type = q('typeInput').value;
   const opts = type === 'choice' ? options() : [];
   const roundId = crypto.randomUUID();
@@ -98,6 +101,7 @@ async function openRound() {
     isOpen:true,
     showResults:false,
     roundId,
+    agendaId: agendaId || null,
     openedAt:serverTimestamp(),
     updatedAt:serverTimestamp()
   };
@@ -105,6 +109,7 @@ async function openRound() {
   await setDoc(sessionRef(),payload,{merge:true});
   await setDoc(roundRef(roundId),{
     roundId,
+    agendaId: agendaId || null,
     question:payload.question,
     type,
     options:opts,
@@ -147,10 +152,10 @@ async function closeRound() {
 }
 
 q('saveBtn').onclick = saveDraft;
-q('openBtn').onclick = openRound;
+q('openBtn').onclick = () => openRound(null);
 q('closeBtn').onclick = closeRound;
 q('showResults').onchange = () => updateDoc(sessionRef(),{showResults:q('showResults').checked,updatedAt:serverTimestamp()});
-q('resetBtn').onclick = async () => {
+async function resetResponses() {
   const snap = await getDoc(sessionRef());
   if (!snap.exists()) return;
   const d = snap.data();
@@ -182,11 +187,12 @@ q('resetBtn').onclick = async () => {
     updatedAt:serverTimestamp()
   });
   await setDoc(roundRef(newRoundId),{
-    roundId:newRoundId, question:d.question || '', type:d.type || 'choice', options:opts,
+    roundId:newRoundId, agendaId:d.agendaId || null, question:d.question || '', type:d.type || 'choice', options:opts,
     counts:opts.map(()=>0), total:0, status:d.isOpen?'open':'draft',
     openedAt:serverTimestamp(), updatedAt:serverTimestamp()
   });
-};
+}
+q('resetBtn').onclick = resetResponses;
 
 
 
@@ -266,14 +272,15 @@ function loadAgendaItem(item, markSelected=true) {
     q('agendaEditBar').classList.remove('hidden');
   }
   renderAgenda();
-  window.scrollTo({top:0,behavior:'smooth'});
+  const editor = q('newInteractionSection');
+  if (editor) { editor.open = true; editor.scrollIntoView({behavior:'smooth',block:'start'}); }
 }
 
 async function openAgendaItem(item) {
   loadAgendaItem(item,false);
   selectedAgendaId = null;
   q('agendaEditBar').classList.add('hidden');
-  await openRound();
+  await openRound(item.id);
 }
 
 async function moveAgenda(index, direction) {
@@ -294,23 +301,38 @@ async function deleteAgendaItem(item) {
   if (selectedAgendaId === item.id) clearAgendaSelection();
 }
 
+async function setReveal(value) {
+  await updateDoc(sessionRef(),{showResults:value,updatedAt:serverTimestamp()});
+}
+
+function isCurrentAgendaItem(item) {
+  return !!currentSessionData && currentSessionData.agendaId === item.id;
+}
+
 function renderAgenda() {
   const el = q('agenda');
   if (!el) return;
   if (!agendaItems.length) {
-    el.innerHTML = '<p class="muted agenda-empty">La scaletta è vuota. Imposta una domanda sopra e premi “Aggiungi interazione corrente”.</p>';
+    el.innerHTML = '<p class="muted agenda-empty">La scaletta è vuota. Apri “NUOVA Interazione” in fondo alla pagina per crearne una.</p>';
     return;
   }
-  el.innerHTML = agendaItems.map((item,i) => `
-    <article class="agenda-item${selectedAgendaId===item.id?' selected':''}" data-id="${esc(item.id)}">
+  el.innerHTML = agendaItems.map((item,i) => {
+    const current = isCurrentAgendaItem(item);
+    const revealLabel = currentSessionData?.showResults ? 'Nascondi' : 'Rivela';
+    const stateLabel = current ? (currentSessionData?.isOpen ? 'IN CORSO' : 'CARICATA') : '';
+    return `
+    <article class="agenda-item${selectedAgendaId===item.id?' selected':''}${current?' current':''}" data-id="${esc(item.id)}">
       <div class="agenda-num">${i+1}</div>
       <div class="agenda-main">
-        <div class="agenda-type">${item.type==='wordcloud'?'WORD CLOUD':'VOTAZIONE'}</div>
+        <div class="agenda-topline"><div class="agenda-type">${item.type==='wordcloud'?'WORD CLOUD':'VOTAZIONE'}</div>${current?`<span class="agenda-live-badge">${stateLabel}</span>`:''}</div>
         <strong>${esc(item.question || 'Senza titolo')}</strong>
         ${item.type==='choice' ? `<div class="agenda-options">${(item.options||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div>` : ''}
       </div>
       <div class="agenda-actions">
         <button class="agenda-open" data-action="open">Apri</button>
+        <button class="secondary agenda-small" data-action="close" ${current?'':'disabled'}>Chiudi</button>
+        <button class="agenda-reveal agenda-small" data-action="reveal" ${current?'':'disabled'}>${revealLabel}</button>
+        <button class="danger agenda-small" data-action="reset" ${current?'':'disabled'}>Azzera</button>
         <button class="secondary agenda-small" data-action="load">Modifica</button>
         <div class="agenda-order">
           <button class="secondary agenda-icon" data-action="up" aria-label="Sposta su" ${i===0?'disabled':''}>↑</button>
@@ -318,11 +340,15 @@ function renderAgenda() {
           <button class="danger agenda-icon" data-action="delete" aria-label="Elimina">×</button>
         </div>
       </div>
-    </article>`).join('');
+    </article>`;
+  }).join('');
 
   el.querySelectorAll('.agenda-item').forEach((node,index) => {
     const item = agendaItems[index];
     node.querySelector('[data-action="open"]').onclick = () => openAgendaItem(item);
+    node.querySelector('[data-action="close"]').onclick = () => isCurrentAgendaItem(item) && closeRound();
+    node.querySelector('[data-action="reveal"]').onclick = () => isCurrentAgendaItem(item) && setReveal(!currentSessionData?.showResults);
+    node.querySelector('[data-action="reset"]').onclick = () => isCurrentAgendaItem(item) && resetResponses();
     node.querySelector('[data-action="load"]').onclick = () => loadAgendaItem(item,true);
     node.querySelector('[data-action="up"]').onclick = () => moveAgenda(index,-1);
     node.querySelector('[data-action="down"]').onclick = () => moveAgenda(index,1);

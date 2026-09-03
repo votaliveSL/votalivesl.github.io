@@ -4,51 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Regia VotaLiveSL - Processo all'AI</title>
-  <link rel="stylesheet" href="style.css?v=6.1.1">
+  <link rel="stylesheet" href="style.css?v=7.8">
 </head>
 <body>
 <main class="app wide">
   <section class="card">
-    <div class="eyebrow">REGIA</div>
-    <h1 class="admin-title">Processo all'Intelligenza Artificiale</h1>
-    <div class="grid2">
-      <label>Tipo di interazione
-        <select id="typeInput">
-          <option value="choice">Scelta / voto</option>
-          <option value="wordcloud">Word Cloud</option>
-        </select>
-      </label>
-      <label>Codice sessione
-        <input id="sessionInput" value="processo-ai-2026">
-      </label>
-    </div>
-    <label>Domanda<input id="questionInput" value="Qual è il vostro verdetto?"></label>
-    <p id="wordCloudHelp" class="muted compact wordcloud-help">Con Word Cloud ogni partecipante può inviare fino a 3 parole o brevi espressioni, una per campo. Le risposte uguali vengono accorpate automaticamente ignorando maiuscole/minuscole.</p>
-    <label id="optionsWrap">Opzioni (una per riga)<textarea id="optionsInput" rows="5">COLPEVOLE
-NON COLPEVOLE
-NON HO ANCORA DECISO</textarea></label>
-    <div class="actions">
-      <button id="saveBtn">Salva</button>
-      <button id="openBtn">Apri</button>
-      <button id="closeBtn" class="secondary">Chiudi</button>
-      <button id="resetBtn" class="danger">Azzera risposte</button>
-    </div>
-    <label class="toggle reveal-toggle"><input type="checkbox" id="showResults"> Rivela il responso sullo schermo</label>
-  </section>
-
-  <section class="card">
     <div class="section-head agenda-head">
       <div>
+        <div class="eyebrow">REGIA</div>
+        <h1 class="admin-title">Processo all'Intelligenza Artificiale</h1>
         <h2>Scaletta evento</h2>
-        <p class="muted compact">Prepara qui tutte le interazioni. Durante il congresso puoi aprirle direttamente senza riscrivere nulla.</p>
-      </div>
-      <button id="agendaAddBtn" class="agenda-primary">Aggiungi interazione corrente</button>
-    </div>
-    <div id="agendaEditBar" class="agenda-editbar hidden">
-      <span>Voce caricata dalla scaletta</span>
-      <div>
-        <button id="agendaUpdateBtn" class="secondary">Aggiorna voce</button>
-        <button id="agendaCancelBtn" class="secondary">Annulla selezione</button>
+        <p class="muted compact">Gestisci da qui le interazioni durante il congresso. I comandi Chiudi, Rivela/Nascondi e Azzera agiscono sulla voce attualmente caricata sullo schermo.</p>
       </div>
     </div>
     <p id="agendaStatus" class="agenda-status hidden" role="status"></p>
@@ -63,24 +29,64 @@ NON HO ANCORA DECISO</textarea></label>
     <div id="results"></div>
   </section>
 
-  <section class="card">
-    <div class="section-head">
-      <div>
-        <h2>Storico votazioni</h2>
-        <p class="muted compact">Ogni tornata resta conservata con domanda, risultati e data/ora.</p>
-      </div>
-    </div>
-    <div id="history" class="history-list"></div>
-  </section>
-
-  <section class="card">
-    <h2>Link unico partecipanti</h2>
-    <p class="muted">È sempre lo stesso: il partecipante lo apre una volta e la pagina segue automaticamente ciò che apri dalla Regia.</p>
+  <section class="card compact-card">
+    <h2>Link partecipanti e schermo</h2>
+    <p class="muted compact">Link partecipanti</p>
     <code id="participantUrl"></code>
-    <h2 class="spaced-title">Link schermo / proiettore</h2>
+    <p class="muted compact spaced-title">Link schermo / proiettore</p>
     <code id="displayUrl"></code>
   </section>
+
+  <details class="card collapsible-card" id="historySection">
+    <summary class="collapsible-summary">
+      <span><strong>Storico votazioni</strong><small>Ogni tornata resta conservata con domanda, risultati e data/ora.</small></span>
+      <span class="chevron">⌄</span>
+    </summary>
+    <div class="collapsible-content">
+      <div id="history" class="history-list"></div>
+    </div>
+  </details>
+
+  <details class="card collapsible-card" id="newInteractionSection">
+    <summary class="collapsible-summary">
+      <span><strong>NUOVA Interazione</strong><small>Crea una nuova votazione o Word Cloud e aggiungila alla scaletta.</small></span>
+      <span class="chevron">⌄</span>
+    </summary>
+    <div class="collapsible-content">
+      <div class="grid2">
+        <label>Tipo di interazione
+          <select id="typeInput">
+            <option value="choice">Scelta / voto</option>
+            <option value="wordcloud">Word Cloud</option>
+          </select>
+        </label>
+        <label>Codice sessione
+          <input id="sessionInput" value="processo-ai-2026">
+        </label>
+      </div>
+      <label>Domanda<input id="questionInput" value="Qual è il vostro verdetto?"></label>
+      <p id="wordCloudHelp" class="muted compact wordcloud-help">Con Word Cloud ogni partecipante può inviare fino a 3 parole o brevi espressioni, una per campo. Le risposte uguali vengono accorpate automaticamente ignorando maiuscole/minuscole.</p>
+      <label id="optionsWrap">Opzioni (una per riga)<textarea id="optionsInput" rows="5">COLPEVOLE
+NON COLPEVOLE
+NON HO ANCORA DECISO</textarea></label>
+      <div class="actions">
+        <button id="agendaAddBtn" class="agenda-primary">Aggiungi alla scaletta</button>
+        <button id="saveBtn">Salva</button>
+        <button id="openBtn">Apri</button>
+        <button id="closeBtn" class="secondary">Chiudi</button>
+        <button id="resetBtn" class="danger">Azzera risposte</button>
+      </div>
+      <label class="toggle reveal-toggle"><input type="checkbox" id="showResults"> Rivela il responso sullo schermo</label>
+      <div id="agendaEditBar" class="agenda-editbar hidden">
+        <span>Voce caricata dalla scaletta</span>
+        <div>
+          <button id="agendaUpdateBtn" class="secondary">Aggiorna voce</button>
+          <button id="agendaCancelBtn" class="secondary">Annulla selezione</button>
+        </div>
+      </div>
+    </div>
+  </details>
 </main>
-<script type="module" src="admin.js?v=7.0"></script>
+<script type="module" src="admin.js?v=7.8"></script>
 </body>
 </html>
