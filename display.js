@@ -157,7 +157,7 @@ function renderCloud(arr) {
   // Candidati ordinati dal centro verso l'esterno secondo distanza "a rombo".
   // Una griglia fitta consente di compattare le parole senza produrre righe regolari.
   const candidates = [{x:cx,y:cy,d:0}];
-  const step = Math.max(12, Math.min(22, base * .026));
+  const step = Math.max(8, Math.min(16, base * .020));
   for (let y = marginY; y <= H - marginY; y += step) {
     for (let x = marginX; x <= W - marginX; x += step) {
       const nx = Math.abs(x - cx) / halfW;
@@ -215,19 +215,26 @@ function renderCloud(arr) {
     let fontSize = parseFloat(el.style.fontSize);
     let best = null;
 
-    for (let shrink=0; shrink<11 && !best; shrink++) {
+    // Le parole sono già ordinate per frequenza decrescente.
+    // La priorità quindi resta assoluta: prima tentiamo a lungo di collocare
+    // una parola frequente, anche allargando progressivamente la sua zona,
+    // e solo dopo passiamo alla successiva.
+    const initialRankLimit = i === 0 ? .08 : Math.min(.78, .24 + Math.sqrt(i) * .105);
+
+    for (let shrink=0; shrink<18 && !best; shrink++) {
       if (shrink) {
-        fontSize *= .90;
-        el.style.fontSize = `${Math.max(14,fontSize)}px`;
+        fontSize *= .92;
+        el.style.fontSize = `${Math.max(12,fontSize)}px`;
       }
       const ew = el.offsetWidth;
       const eh = el.offsetHeight;
       const visualW = rotate ? eh : ew;
       const visualH = rotate ? ew : eh;
 
-      // Le prime parole devono stare molto vicine al centro; le altre possono
-      // progressivamente occupare tutta la losanga.
-      const rankLimit = i === 0 ? .08 : Math.min(1.02, .24 + Math.sqrt(i) * .105);
+      // Se il centro è occupato, non scartiamo la parola: allarghiamo
+      // gradualmente la ricerca fino a tutta la losanga. Questo evita che
+      // parole con 2+ voti spariscano mentre restano visibili parole da 1 voto.
+      const rankLimit = Math.min(1.02, initialRankLimit + shrink * .075);
 
       for (const c of candidates) {
         if (c.d > rankLimit) break;
@@ -238,8 +245,30 @@ function renderCloud(arr) {
           b:c.y+visualH/2
         };
         if (!insideDiamond(box, 1.025)) continue;
-        const pad = i < 8 ? 5 : 3;
+        const pad = i < 8 ? Math.max(2, 5 - Math.floor(shrink/5)) : 2;
         if (!placed.every(p => !overlaps(box,p,pad))) continue;
+        best = {box, centerX:c.x, centerY:c.y, ew, eh};
+        break;
+      }
+    }
+
+    if (!best) {
+      // Ultimo tentativo a dimensione minima su tutta la losanga.
+      // In questo modo il mancato inserimento diventa davvero eccezionale.
+      el.style.fontSize = '12px';
+      const ew = el.offsetWidth;
+      const eh = el.offsetHeight;
+      const visualW = rotate ? eh : ew;
+      const visualH = rotate ? ew : eh;
+      for (const c of candidates) {
+        const box = {
+          l:c.x-visualW/2,
+          t:c.y-visualH/2,
+          r:c.x+visualW/2,
+          b:c.y+visualH/2
+        };
+        if (!insideDiamond(box, 1.025)) continue;
+        if (!placed.every(p => !overlaps(box,p,1))) continue;
         best = {box, centerX:c.x, centerY:c.y, ew, eh};
         break;
       }
