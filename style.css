@@ -704,3 +704,58 @@ body.display-body{
 .cloud-mode .stable-cloud .stable-cloud-word:nth-child(4n+2){color:#356db2}
 .cloud-mode .stable-cloud .stable-cloud-word:nth-child(4n+3){color:#6d5aa5}
 .cloud-mode .stable-cloud .stable-cloud-word:nth-child(4n){color:#4e6687}
+
+/* === VotaLiveSL v7.9.1: Word Cloud compatta, organica e sempre dentro schermo === */
+.cloud-mode .display-cloud.packed-cloud{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  padding:clamp(10px,1.5vh,18px) clamp(24px,2.5vw,46px);
+  gap:clamp(3px,.8vh,9px);
+  overflow:hidden;
+}
+.cloud-mode .packed-cloud .packed-row{
+  width:auto;
+  display:flex;
+  flex:0 0 auto;
+  justify-content:center;
+  align-items:center;
+  gap:clamp(10px,1vw,22px);
+  line-height:1;
+  white-space:nowrap;
+  box-sizing:border-box;
+}
+.cloud-mode .packed-cloud .packed-word{
+  position:static!important;
+  left:auto!important;
+  top:auto!important;
+  display:inline-block;
+  flex:0 0 auto;
+  white-space:nowrap;
+  margin:0;
+  padding:0 .025em;
+  line-height:.90;
+  letter-spacing:-.04em;
+  animation:none!important;
+  text-shadow:0 1px 0 rgba(255,255,255,.45);
+}
+.cloud-mode .packed-cloud .packed-row:nth-child(4n+1) .packed-word:nth-child(4n+1),
+.cloud-mode .packed-cloud .packed-word:nth-child(4n+1){color:#087b87}
+.cloud-mode .packed-cloud .packed-word:nth-child(4n+2){color:#356db2}
+.cloud-mode .packed-cloud .packed-word:nth-child(4n+3){color:#6d5aa5}
+.cloud-mode .packed-cloud .packed-word:nth-child(4n){color:#4e6687}
+.cloud-mode .packed-cloud-fallback{
+  display:flex!important;
+  flex-direction:row!important;
+  flex-wrap:wrap!important;
+  align-content:center!important;
+  justify-content:center!important;
+  gap:8px 16px!important;
+  padding:18px 36px!important;
+}

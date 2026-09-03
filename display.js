@@ -139,82 +139,120 @@ function subscribeCloud(roundId) {
 }
 
 function renderCloud(arr) {
-  results.innerHTML = '<div class="display-cloud diamond-cloud stable-cloud" id="displayCloud"></div>';
+  results.innerHTML = '<div class="display-cloud diamond-cloud packed-cloud" id="displayCloud"></div>';
   const cloud = document.getElementById('displayCloud');
 
-  requestAnimationFrame(() => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const rect = cloud.getBoundingClientRect();
+    const W = Math.max(320, rect.width);
+    const H = Math.max(220, rect.height);
+    const n = arr.length;
     const maxCount = Math.max(...arr.map(x => x.count));
     const minCount = Math.min(...arr.map(x => x.count));
-    const n = arr.length;
 
-    // Numero di righe dispari, così esiste sempre una riga centrale.
-    let rowCount = Math.max(1, Math.ceil(Math.sqrt(n * 1.45)));
+    // Canvas indipendente dal DOM: misura le parole prima di disporle.
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const fontFamily = getComputedStyle(document.body).fontFamily || 'Arial, sans-serif';
+
+    // Più righe quando aumentano i termini, ma sempre numero dispari per avere un cuore centrale.
+    let rowCount = Math.max(5, Math.min(11, Math.round(Math.sqrt(n) * 1.45)));
     if (rowCount % 2 === 0) rowCount++;
-    rowCount = Math.min(rowCount, 13);
     const center = Math.floor(rowCount / 2);
 
-    // Capacità delle righe: massima al centro, progressivamente minore verso alto/basso.
-    const capacities = Array.from({length: rowCount}, (_, r) => {
-      const dist = Math.abs(r - center);
-      return Math.max(1, (center + 1) - dist);
+    // Forma a rombo morbido: le righe centrali possono occupare quasi tutta la larghezza,
+    // quelle periferiche sono progressivamente più corte.
+    const rowTargets = Array.from({length: rowCount}, (_, r) => {
+      const d = center ? Math.abs(r-center)/center : 0;
+      const factor = 0.50 + 0.46 * Math.pow(1-d, 0.62); // 50% ai bordi, 96% al centro
+      return W * factor;
     });
-    while (capacities.reduce((a,b)=>a+b,0) < n) {
-      capacities[center]++;
-      for (let d=1; d<=center && capacities.reduce((a,b)=>a+b,0)<n; d++) {
-        capacities[center-d]++;
-        if (capacities.reduce((a,b)=>a+b,0)<n) capacities[center+d]++;
-      }
-    }
 
-    // Riempie dal centro verso l'esterno per tenere le parole più frequenti nel cuore della nuvola.
-    const order = [center];
+    // Ordine di riempimento centro -> esterno per tenere i termini più frequenti nel cuore.
+    const rowPriority = [center];
     for (let d=1; d<=center; d++) {
-      order.push(center-d);
-      order.push(center+d);
-    }
-    const rows = Array.from({length: rowCount}, () => []);
-    let cursor = 0;
-    for (const r of order) {
-      for (let k=0; k<capacities[r] && cursor<n; k++) rows[r].push(arr[cursor++]);
+      if (center-d >= 0) rowPriority.push(center-d);
+      if (center+d < rowCount) rowPriority.push(center+d);
     }
 
-    // Nelle singole righe mette il termine più importante vicino al centro.
-    rows.forEach(row => {
-      const ranked = row.splice(0);
-      const slots = new Array(ranked.length);
-      const centerPos = (ranked.length - 1) / 2;
-      const slotOrder = Array.from({length: ranked.length}, (_,i)=>i)
-        .sort((a,b)=>Math.abs(a-centerPos)-Math.abs(b-centerPos));
-      ranked.forEach((item,i)=>slots[slotOrder[i]]=item);
-      row.push(...slots);
-    });
+    const baseMax = Math.min(86, Math.max(54, W * 0.055), H * 0.145);
+    const baseMin = Math.max(22, Math.min(34, baseMax * 0.40));
+    const gapX = Math.max(10, Math.min(22, W * 0.010));
+    const gapY = Math.max(3, Math.min(10, H * 0.012));
 
-    cloud.innerHTML = rows.map((row, r) => {
-      const dist = Math.abs(r-center);
-      const rowClass = `cloud-row cloud-row-${dist}`;
-      return `<div class="${rowClass}">${row.map((x) => {
-        const ratio = maxCount === minCount ? 1 : (x.count-minCount)/(maxCount-minCount);
-        const weight = .18 + .82*Math.pow(ratio,.68);
-        return `<span class="display-cloud-word stable-cloud-word" style="--weight:${weight.toFixed(4)}" title="${x.count}">${esc(x.label)}</span>`;
-      }).join('')}</div>`;
-    }).join('');
+    function weightFor(x) {
+      if (maxCount === minCount) return 0.72;
+      const ratio = (x.count-minCount)/(maxCount-minCount);
+      return 0.20 + 0.80 * Math.pow(ratio, 0.66);
+    }
 
-    // Riduce l'intera nuvola solo se necessario: nessuna parola viene eliminata o posizionata fuori area.
-    const rowsEl = [...cloud.querySelectorAll('.cloud-row')];
+    function tryLayout(scale) {
+      const items = arr.map((x, idx) => {
+        const weight = weightFor(x);
+        const size = (baseMin + (baseMax-baseMin)*weight) * scale;
+        const fw = idx < 3 ? 900 : 850;
+        ctx.font = `${fw} ${size}px ${fontFamily}`;
+        const width = ctx.measureText(x.label).width + size*0.10;
+        return {...x, idx, weight, size, fw, width};
+      });
+
+      const rows = Array.from({length: rowCount}, () => []);
+      const used = Array(rowCount).fill(0);
+
+      // Ogni termine DEVE trovare una riga. Se non entra, il tentativo fallisce e si ridimensiona tutto.
+      for (const item of items) {
+        let candidates = rowPriority
+          .filter(r => used[r] + (rows[r].length ? gapX : 0) + item.width <= rowTargets[r])
+          .sort((a,b) => {
+            // Prima vicinanza al centro, poi riga meno piena in proporzione alla propria capacità.
+            const ca = Math.abs(a-center), cb = Math.abs(b-center);
+            if (ca !== cb) return ca-cb;
+            return (used[a]/rowTargets[a])-(used[b]/rowTargets[b]);
+          });
+        if (!candidates.length) return null;
+        const r = candidates[0];
+        rows[r].push(item);
+        used[r] += (rows[r].length > 1 ? gapX : 0) + item.width;
+      }
+
+      // Altezza reale stimata di ogni riga.
+      const heights = rows.map(row => row.length ? Math.max(...row.map(x=>x.size))*0.94 : 0);
+      const totalH = heights.reduce((a,b)=>a+b,0) + gapY * rows.filter(r=>r.length).length;
+      if (totalH > H * 0.95) return null;
+      return {rows, used, heights, totalH};
+    }
+
     let scale = 1;
-    const fits = () => {
-      const cr = cloud.getBoundingClientRect();
-      return rowsEl.every(row => {
-        const rr = row.getBoundingClientRect();
-        return rr.width <= cr.width - 8 && rr.left >= cr.left - 1 && rr.right <= cr.right + 1;
-      }) && cloud.scrollHeight <= cloud.clientHeight + 2;
-    };
-
-    while (!fits() && scale > .48) {
-      scale -= .04;
-      cloud.style.setProperty('--cloud-scale', scale.toFixed(2));
+    let layout = tryLayout(scale);
+    while (!layout && scale > 0.48) {
+      scale -= 0.035;
+      layout = tryLayout(scale);
     }
-  });
+    // Fallback estremo: continua a ridurre finché tutto entra. Nessun termine viene eliminato.
+    while (!layout && scale > 0.28) {
+      scale -= 0.025;
+      layout = tryLayout(scale);
+    }
+    if (!layout) {
+      // Con quantità eccezionali, usa più righe visibili senza scartare termini.
+      cloud.classList.add('packed-cloud-fallback');
+      cloud.innerHTML = arr.map(x => `<span class="packed-word" style="font-size:clamp(16px,1.45vw,27px)">${esc(x.label)}</span>`).join('');
+      return;
+    }
+
+    // Righe vuote non vengono renderizzate. Piccoli offset deterministici rendono il profilo meno "tabellare".
+    const active = layout.rows.map((row,r)=>({row,r})).filter(x=>x.row.length);
+    cloud.innerHTML = active.map(({row,r}, activeIndex) => {
+      const dist = Math.abs(r-center);
+      const maxRowW = rowTargets[r];
+      const stagger = ((r % 3) - 1) * Math.min(14, W*0.008);
+      const words = row.map((x,j) => {
+        const lift = ((x.idx * 7 + j * 3) % 5 - 2) * Math.min(2.2, x.size*0.025);
+        return `<span class="display-cloud-word packed-word" title="${x.count}" style="font-size:${x.size.toFixed(1)}px;font-weight:${x.fw};transform:translateY(${lift.toFixed(1)}px)">${esc(x.label)}</span>`;
+      }).join('');
+      return `<div class="packed-row packed-row-${dist}" style="max-width:${maxRowW.toFixed(0)}px;transform:translateX(${stagger.toFixed(1)}px)">${words}</div>`;
+    }).join('');
+  }));
 }
 function esc(s) {
   return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
