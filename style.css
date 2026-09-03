@@ -759,3 +759,37 @@ body.display-body{
   gap:8px 16px!important;
   padding:18px 36px!important;
 }
+
+
+/* === VotaLiveSL v7.9.2: nuvola romboide irregolare + palette estesa + verticali === */
+.cloud-mode .organic-cloud{
+  overflow:hidden;
+}
+.cloud-mode .organic-cloud .packed-row{
+  overflow:visible;
+}
+.cloud-mode .organic-cloud .packed-word{
+  transform-origin:center center;
+  border-radius:.08em;
+}
+/* Palette più viva ma coerente con il display */
+.cloud-mode .organic-cloud .color-0{color:#087f89!important}
+.cloud-mode .organic-cloud .color-1{color:#326fbd!important}
+.cloud-mode .organic-cloud .color-2{color:#7254b6!important}
+.cloud-mode .organic-cloud .color-3{color:#4d678a!important}
+.cloud-mode .organic-cloud .color-4{color:#b12a86!important}
+.cloud-mode .organic-cloud .color-5{color:#d66a00!important}
+.cloud-mode .organic-cloud .color-6{color:#27843d!important}
+
+.cloud-mode .organic-cloud .word-vertical{
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  line-height:.88!important;
+  padding:0 .02em!important;
+}
+
+/* Disattiva i vecchi nth-child: i colori sono ora assegnati stabilmente per parola. */
+.cloud-mode .organic-cloud .packed-word:nth-child(n){
+  text-shadow:0 1px 0 rgba(255,255,255,.42);
+}
