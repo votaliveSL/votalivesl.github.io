@@ -139,14 +139,13 @@ function subscribeCloud(roundId) {
 }
 
 function renderCloud(arr) {
-  results.innerHTML = '<div class="display-cloud diamond-cloud packed-cloud organic-cloud" id="displayCloud"></div>';
+  results.innerHTML = '<div class="display-cloud spiral-cloud" id="displayCloud"></div>';
   const cloud = document.getElementById('displayCloud');
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const rect = cloud.getBoundingClientRect();
     const W = Math.max(320, rect.width);
     const H = Math.max(220, rect.height);
-    const n = arr.length;
     const maxCount = Math.max(...arr.map(x => x.count));
     const minCount = Math.min(...arr.map(x => x.count));
 
@@ -154,38 +153,15 @@ function renderCloud(arr) {
     const ctx = canvas.getContext('2d');
     const fontFamily = getComputedStyle(document.body).fontFamily || 'Arial, sans-serif';
 
-    // Più righe per ottenere un profilo romboide irregolare, senza perdere parole.
-    let rowCount = Math.max(5, Math.min(13, Math.round(Math.sqrt(n) * 1.65)));
-    if (rowCount % 2 === 0) rowCount++;
-    const center = Math.floor(rowCount / 2);
-
-    // Profilo: stretto sopra/sotto, largo al centro. Una piccola irregolarità
-    // deterministica evita l'effetto ovale/tabellare.
-    const rowTargets = Array.from({length: rowCount}, (_, r) => {
-      const d = center ? Math.abs(r-center)/center : 0;
-      const diamond = 0.34 + 0.62 * Math.pow(1-d, 0.82);
-      const wobble = [0.96,1.03,0.99,1.04,0.97][r % 5];
-      return W * diamond * wobble;
-    });
-
-    const rowPriority = [center];
-    for (let d=1; d<=center; d++) {
-      // Alternanza sopra/sotto per rendere il profilo meno simmetrico.
-      if (d % 2) {
-        if (center-d >= 0) rowPriority.push(center-d);
-        if (center+d < rowCount) rowPriority.push(center+d);
-      } else {
-        if (center+d < rowCount) rowPriority.push(center+d);
-        if (center-d >= 0) rowPriority.push(center-d);
-      }
-    }
-
-    const baseMax = Math.min(88, Math.max(55, W * 0.056), H * 0.15);
-    const baseMin = Math.max(20, Math.min(32, baseMax * 0.38));
-    const gapX = Math.max(4, Math.min(12, W * 0.005));
-    const gapY = Math.max(2, Math.min(6, H * 0.006));
-    // Frazione di sovrapposizione verticale tra righe adiacenti (effetto più "compatto").
-    const overlapFactor = 0.16;
+    const pad = Math.max(6, Math.min(18, W * 0.01));
+    const gapPx = Math.max(3, Math.min(9, W * 0.004));
+    // Le dimensioni tengono conto anche di quante parole ci sono: con più
+    // parole, ciascuna deve essere proporzionalmente più piccola.
+    const baseMax = Math.min(150, Math.max(30, Math.sqrt(W*H) * 0.62 / Math.sqrt(Math.max(arr.length,4))), H * 0.34);
+    const baseMin = Math.max(11, baseMax * 0.14);
+    // La spirale segue le proporzioni reali del contenitore, così sfrutta
+    // bene anche schermi molto larghi (16:9) invece di restare "tonda".
+    const squashY = Math.max(0.45, Math.min(1, H / W));
 
     function hashOf(label) {
       let hash = 0;
@@ -197,101 +173,102 @@ function renderCloud(arr) {
     function weightFor(x) {
       if (maxCount === minCount) return 0.70;
       const ratio = (x.count-minCount)/(maxCount-minCount);
-      return 0.18 + 0.82 * Math.pow(ratio, 0.64);
+      return 0.10 + 0.90 * Math.pow(ratio, 1.7);
     }
 
-    function isVertical(item) {
-      // Circa 22% dei termini, soltanto piccoli/medi e preferibilmente brevi.
-      // Scelta deterministica: non cambia mentre arrivano nuove risposte.
-      if (n < 8 || item.weight > 0.68 || item.label.length > 15) return false;
-      return (hashOf(item.label) % 100) < 22;
+    function isVertical(item, idx) {
+      // La parola più frequente resta sempre orizzontale (leggibilità del
+      // "titolo" della nuvola). Per le altre, ~20% in verticale, scelta
+      // deterministica in base alla parola stessa.
+      if (idx === 0 || item.label.length > 16) return false;
+      return (hashOf(item.label) % 100) < 20;
     }
 
-    // Piccola inclinazione deterministica per le parole orizzontali, per rompere
-    // l'effetto "a righe" senza compromettere la leggibilità.
-    function tiltFor(item) {
-      if (item.weight > 0.55) return 0; // le parole grandi restano dritte
-      return ((hashOf(item.label) % 9) - 4) * 0.9; // circa -3.6°..+3.6°
+    // Rettangolo di ingombro effettivo (dopo rotazione), usato per il
+    // posizionamento e il controllo delle collisioni.
+    function effBox(naturalW, naturalH, angleDeg) {
+      const rad = angleDeg * Math.PI/180;
+      const c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
+      return { w: naturalW*c + naturalH*s, h: naturalW*s + naturalH*c };
     }
 
-    // Sovrapposizione (in px) tra due righe adiacenti, in base alla più
-    // piccola delle due altezze. Capata per restare leggibile.
-    function rowOverlap(hA, hB) {
-      const h = Math.min(hA, hB);
-      return Math.min(h * overlapFactor, h * 0.30);
+    function collides(cx, cy, w, h, placed) {
+      const halfW = w/2 + gapPx/2, halfH = h/2 + gapPx/2;
+      for (const p of placed) {
+        const pHalfW = p.effW/2 + gapPx/2, pHalfH = p.effH/2 + gapPx/2;
+        if (Math.abs(cx-p.cx) < halfW+pHalfW && Math.abs(cy-p.cy) < halfH+pHalfH) return true;
+      }
+      return false;
+    }
+
+    // Posiziona le parole una alla volta (dalla più frequente) lungo una
+    // spirale che parte dal centro, cercando il primo punto libero.
+    function placeWords(items) {
+      const placed = [];
+      const cx0 = W/2, cy0 = H/2;
+      const angleStep = 0.26;
+      const radiusStep = 2.6;
+      const maxSteps = 1400;
+
+      for (const item of items) {
+        let theta = (hashOf(item.label) % 628) / 100; // punto di partenza variabile per parola
+        let radius = 0;
+        let placedAt = null;
+
+        for (let step=0; step<maxSteps; step++) {
+          const cx = cx0 + radius*Math.cos(theta);
+          const cy = cy0 + radius*Math.sin(theta)*squashY;
+          const fitsBounds = cx-item.effW/2 >= pad && cx+item.effW/2 <= W-pad &&
+                              cy-item.effH/2 >= pad && cy+item.effH/2 <= H-pad;
+          if (fitsBounds && !collides(cx, cy, item.effW, item.effH, placed)) {
+            placedAt = {cx, cy};
+            break;
+          }
+          theta += angleStep;
+          radius += radiusStep;
+        }
+        if (!placedAt) return null;
+        placed.push({...item, cx: placedAt.cx, cy: placedAt.cy});
+      }
+      return placed;
     }
 
     function tryLayout(scale) {
       const items = arr.map((x, idx) => {
         const weight = weightFor(x);
         const size = (baseMin + (baseMax-baseMin)*weight) * scale;
-        const fw = idx < 3 ? 900 : 850;
+        const fw = idx === 0 ? 900 : (idx < 4 ? 870 : 800);
         ctx.font = `${fw} ${size}px ${fontFamily}`;
-        const textW = ctx.measureText(x.label).width + size*0.10;
-        const vertical = isVertical({...x, weight});
-        // Per una parola ruotata l'ingombro orizzontale è circa la sua altezza.
-        const width = vertical ? size * 1.03 : textW;
-        const height = vertical ? textW : size * 0.94;
-        return {...x, idx, weight, size, fw, textW, width, height, vertical};
+        const naturalW = ctx.measureText(x.label).width + size*0.06;
+        const naturalH = size * 0.92;
+        const vertical = isVertical(x, idx);
+        const angleDeg = vertical ? 90 : 0;
+        const {w: effW, h: effH} = effBox(naturalW, naturalH, angleDeg);
+        return {...x, idx, weight, size, fw, naturalW, naturalH, vertical, angleDeg, effW, effH};
       });
-
-      const rows = Array.from({length: rowCount}, () => []);
-      const used = Array(rowCount).fill(0);
-
-      for (const item of items) {
-        const candidates = rowPriority
-          .filter(r => used[r] + (rows[r].length ? gapX : 0) + item.width <= rowTargets[r])
-          .sort((a,b) => {
-            const ca = Math.abs(a-center), cb = Math.abs(b-center);
-            if (ca !== cb) return ca-cb;
-            return (used[a]/rowTargets[a])-(used[b]/rowTargets[b]);
-          });
-        if (!candidates.length) return null;
-        const r = candidates[0];
-        rows[r].push(item);
-        used[r] += (rows[r].length > 1 ? gapX : 0) + item.width;
-      }
-
-      const heights = rows.map(row => row.length ? Math.max(...row.map(x=>x.height)) : 0);
-      const activeHeights = rows.map((row,r)=>heights[r]).filter((h,r)=>rows[r].length);
-      let totalH = activeHeights.length ? activeHeights[0] : 0;
-      for (let i=1; i<activeHeights.length; i++) {
-        totalH += gapY + activeHeights[i] - rowOverlap(activeHeights[i-1], activeHeights[i]);
-      }
-      if (totalH > H * 0.94) return null;
-      return {rows, heights, totalH};
+      return placeWords(items);
     }
 
     let scale = 1;
-    let layout = tryLayout(scale);
-    while (!layout && scale > 0.30) {
-      scale -= scale > 0.55 ? 0.035 : 0.025;
-      layout = tryLayout(scale);
+    let placed = tryLayout(scale);
+    while (!placed && scale > 0.28) {
+      scale -= scale > 0.55 ? 0.05 : 0.03;
+      placed = tryLayout(scale);
     }
 
-    if (!layout) {
+    if (!placed) {
       // Fallback sicuro: tutte le parole, mai tagliate o eliminate.
-      cloud.classList.add('packed-cloud-fallback');
+      cloud.classList.add('packed-cloud-fallback','packed-cloud','organic-cloud');
       cloud.innerHTML = arr.map((x,i) =>
         `<span class="packed-word color-${i%7}" style="font-size:clamp(15px,1.35vw,25px)">${esc(x.label)}</span>`
       ).join('');
       return;
     }
 
-    const active = layout.rows.map((row,r)=>({row,r})).filter(x=>x.row.length);
-    cloud.innerHTML = active.map(({row,r},i) => {
-      const dist = Math.abs(r-center);
-      const staggerPattern = [0, -18, 11, -8, 16, -12, 7];
-      const stagger = staggerPattern[r % staggerPattern.length] * Math.min(1, W/1500);
-      const marginTop = i === 0 ? 0 : gapY - rowOverlap(layout.heights[active[i-1].r], layout.heights[r]);
-      const words = row.map((x,j) => {
-        const lift = x.vertical ? 0 : (((x.idx * 7 + j * 3) % 5 - 2) * Math.min(2.0, x.size*0.022));
-        const tilt = x.vertical ? 0 : tiltFor(x);
-        const cls = `display-cloud-word packed-word color-${x.idx%7}${x.vertical?' word-vertical':''}`;
-        const transform = x.vertical ? 'rotate(-90deg)' : `translateY(${lift.toFixed(1)}px) rotate(${tilt.toFixed(1)}deg)`;
-        return `<span class="${cls}" title="${x.count}" style="font-size:${x.size.toFixed(1)}px;font-weight:${x.fw};transform:${transform}">${esc(x.label)}</span>`;
-      }).join('');
-      return `<div class="packed-row packed-row-${dist}" style="max-width:${rowTargets[r].toFixed(0)}px;margin-top:${marginTop.toFixed(1)}px;transform:translateX(${stagger.toFixed(1)}px)">${words}</div>`;
+    cloud.innerHTML = placed.map(x => {
+      const cls = `spiral-word color-${x.idx%7}${x.vertical?' word-vertical':''}`;
+      const transform = `translate(-50%,-50%) rotate(${x.angleDeg}deg)`;
+      return `<span class="${cls}" title="${x.count}" style="left:${x.cx.toFixed(1)}px;top:${x.cy.toFixed(1)}px;font-size:${x.size.toFixed(1)}px;font-weight:${x.fw};transform:${transform}">${esc(x.label)}</span>`;
     }).join('');
   }));
 }

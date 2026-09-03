@@ -798,3 +798,29 @@ body.display-body{
 .cloud-mode .organic-cloud .packed-word:nth-child(n){
   text-shadow:0 1px 0 rgba(255,255,255,.42);
 }
+
+/* === VotaLiveSL v7.10: Word Cloud a spirale (packing classico, stile Wordle) === */
+.cloud-mode .display-cloud.spiral-cloud{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+}
+.cloud-mode .spiral-cloud .spiral-word{
+  position:absolute;
+  display:block;
+  white-space:nowrap;
+  line-height:1;
+  letter-spacing:-.02em;
+  color:var(--ink);
+  text-shadow:0 1px 0 rgba(255,255,255,.45);
+  animation:cloudIn .32s ease both;
+}
+.cloud-mode .spiral-cloud .color-0{color:#087f89!important}
+.cloud-mode .spiral-cloud .color-1{color:#326fbd!important}
+.cloud-mode .spiral-cloud .color-2{color:#7254b6!important}
+.cloud-mode .spiral-cloud .color-3{color:#4d678a!important}
+.cloud-mode .spiral-cloud .color-4{color:#b12a86!important}
+.cloud-mode .spiral-cloud .color-5{color:#d66a00!important}
+.cloud-mode .spiral-cloud .color-6{color:#27843d!important}
