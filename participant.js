@@ -10,15 +10,36 @@ const question = document.getElementById('question');
 const status = document.getElementById('status');
 const thanks = document.getElementById('thanks');
 const key = r => `answered:${sessionId}:${r}`;
+let lastParticipantState = null;
+
+function participantStateSignature(d) {
+  return JSON.stringify({
+    roundId:d?.roundId || '',
+    isOpen:!!d?.isOpen,
+    question:d?.question || '',
+    type:d?.type || 'choice',
+    options:Array.isArray(d?.options) ? d.options : []
+  });
+}
 
 onSnapshot(ref, s => {
   if (!s.exists()) {
+    lastParticipantState = null;
     showQuestion('Sessione non configurata');
     status.textContent = 'Controlla il link.';
     box.innerHTML = '';
     return;
   }
-  render(s.data());
+
+  const d = s.data();
+  const signature = participantStateSignature(d);
+
+  // Non ridisegnare la pagina partecipante per aggiornamenti che non la riguardano
+  // (es. Rivela/Nascondi risultati o conteggi della regia). In questo modo
+  // eventuali parole già digitate ma non ancora inviate restano nei campi.
+  if (signature === lastParticipantState) return;
+  lastParticipantState = signature;
+  render(d);
 });
 
 function showQuestion(text) {
