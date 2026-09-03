@@ -262,7 +262,7 @@ function clearAgendaSelection() {
   renderAgenda();
 }
 
-function loadAgendaItem(item, markSelected=true) {
+function loadAgendaItem(item, markSelected=true, scrollToEditor=true) {
   q('questionInput').value = item.question || '';
   q('typeInput').value = item.type || 'choice';
   q('optionsInput').value = (item.options || []).join('\n');
@@ -273,11 +273,11 @@ function loadAgendaItem(item, markSelected=true) {
   }
   renderAgenda();
   const editor = q('newInteractionSection');
-  if (editor) { editor.open = true; editor.scrollIntoView({behavior:'smooth',block:'start'}); }
+  if (editor && scrollToEditor) { editor.open = true; editor.scrollIntoView({behavior:'smooth',block:'start'}); }
 }
 
 async function openAgendaItem(item) {
-  loadAgendaItem(item,false);
+  loadAgendaItem(item,false,false);
   selectedAgendaId = null;
   q('agendaEditBar').classList.add('hidden');
   await openRound(item.id);
