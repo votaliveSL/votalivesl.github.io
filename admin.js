@@ -384,7 +384,7 @@ function wordsFromResponse(data) {
   return one ? [one] : [];
 }
 
-function canonicalWord(raw) {
+function canonicalAdminWord(raw) {
   const label = String(raw || '')
     .normalize('NFC')
     .replace(/^[\s"'“”‘’.,;:!?()\[\]{}]+|[\s"'“”‘’.,;:!?()\[\]{}]+$/g, '')
@@ -394,30 +394,29 @@ function canonicalWord(raw) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('it');
-  return { label, key };
+  return {label,key};
 }
 
 function wordFrequencies(words) {
-  const freq = {};
+  const grouped = {};
   words.forEach(w => {
-    const {label,key} = canonicalWord(w);
+    const {label,key} = canonicalAdminWord(w);
     if (!key) return;
-    if (!freq[key]) freq[key] = {label,count:0};
-    if (/[^\x00-\x7F]/.test(label)) freq[key].label = label;
-    freq[key].count++;
+    if (!grouped[key]) grouped[key] = {label,count:0};
+    if (/[^\x00-\x7F]/.test(label)) grouped[key].label = label;
+    grouped[key].count++;
   });
-  return Object.values(freq)
-    .sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label,'it'));
+  return Object.fromEntries(Object.values(grouped).map(x => [x.label, x.count]));
 }
 
 function render(d,words) {
   if (d?.type === 'wordcloud') {
     const freq = wordFrequencies(words);
-    const arr = freq;
+    const arr = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
     q('totalVotes').textContent = words.length;
-    const maxCount = Math.max(1,...arr.map(x=>x.count));
+    const maxCount = Math.max(1,...arr.map(([,n])=>n));
     q('results').innerHTML = arr.length
-      ? `<div class="cloud">${arr.map(({label,count:n},i)=>`<span class="cloud-word rank-${Math.min(i,5)}" style="--weight:${(n/maxCount).toFixed(3)}" title="${n} ${n===1?'risposta':'risposte'}">${esc(label)}${n>1?`<sup>${n}</sup>`:''}</span>`).join('')}</div>`
+      ? `<div class="cloud">${arr.map(([w,n],i)=>`<span class="cloud-word rank-${Math.min(i,5)}" style="--weight:${(n/maxCount).toFixed(3)}" title="${n} ${n===1?'risposta':'risposte'}">${esc(w)}${n>1?`<sup>${n}</sup>`:''}</span>`).join('')}</div>`
       : '<p class="muted">In attesa delle prime parole…</p>';
     return;
   }
