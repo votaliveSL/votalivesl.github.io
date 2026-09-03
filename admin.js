@@ -384,23 +384,40 @@ function wordsFromResponse(data) {
   return one ? [one] : [];
 }
 
+function canonicalWord(raw) {
+  const label = String(raw || '')
+    .normalize('NFC')
+    .replace(/^[\s"'“”‘’.,;:!?()\[\]{}]+|[\s"'“”‘’.,;:!?()\[\]{}]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const key = label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('it');
+  return { label, key };
+}
+
 function wordFrequencies(words) {
   const freq = {};
   words.forEach(w => {
-    const k = String(w).trim().toLocaleLowerCase('it');
-    if (k) freq[k] = (freq[k]||0)+1;
+    const {label,key} = canonicalWord(w);
+    if (!key) return;
+    if (!freq[key]) freq[key] = {label,count:0};
+    if (/[^\x00-\x7F]/.test(label)) freq[key].label = label;
+    freq[key].count++;
   });
-  return freq;
+  return Object.values(freq)
+    .sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label,'it'));
 }
 
 function render(d,words) {
   if (d?.type === 'wordcloud') {
     const freq = wordFrequencies(words);
-    const arr = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+    const arr = freq;
     q('totalVotes').textContent = words.length;
-    const maxCount = Math.max(1,...arr.map(([,n])=>n));
+    const maxCount = Math.max(1,...arr.map(x=>x.count));
     q('results').innerHTML = arr.length
-      ? `<div class="cloud">${arr.map(([w,n],i)=>`<span class="cloud-word rank-${Math.min(i,5)}" style="--weight:${(n/maxCount).toFixed(3)}" title="${n} ${n===1?'risposta':'risposte'}">${esc(w)}${n>1?`<sup>${n}</sup>`:''}</span>`).join('')}</div>`
+      ? `<div class="cloud">${arr.map(({label,count:n},i)=>`<span class="cloud-word rank-${Math.min(i,5)}" style="--weight:${(n/maxCount).toFixed(3)}" title="${n} ${n===1?'risposta':'risposte'}">${esc(label)}${n>1?`<sup>${n}</sup>`:''}</span>`).join('')}</div>`
       : '<p class="muted">In attesa delle prime parole…</p>';
     return;
   }
