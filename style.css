@@ -726,7 +726,7 @@ body.display-body{
   flex:0 0 auto;
   justify-content:center;
   align-items:center;
-  gap:clamp(4px,.5vw,12px);
+  gap:clamp(10px,1vw,22px);
   line-height:1;
   white-space:nowrap;
   box-sizing:border-box;
@@ -765,11 +765,6 @@ body.display-body{
 .cloud-mode .organic-cloud{
   overflow:hidden;
 }
-/* Il gap verticale tra le righe è ora calcolato in JS (margin-top per riga,
-   con sovrapposizione), quindi qui va azzerato per non sommarsi. */
-.cloud-mode .organic-cloud.packed-cloud{
-  gap:0;
-}
 .cloud-mode .organic-cloud .packed-row{
   overflow:visible;
 }
@@ -799,28 +794,61 @@ body.display-body{
   text-shadow:0 1px 0 rgba(255,255,255,.42);
 }
 
-/* === VotaLiveSL v7.10: Word Cloud a spirale (packing classico, stile Wordle) === */
-.cloud-mode .display-cloud.spiral-cloud{
-  position:absolute;
-  inset:0;
+
+/* === VotaLiveSL v7.9.3: rombo più marcato + verticali reali === */
+.cloud-mode .cloud-v793{
+  gap:clamp(2px,.55vh,7px)!important;
+  padding:clamp(8px,1vh,14px) clamp(30px,3vw,58px)!important;
+}
+.cloud-mode .cloud-v793 .packed-row{
+  max-width:calc(100% - 12px);
+  justify-content:center;
+  overflow:visible;
+}
+.cloud-mode .cloud-v793 .word-vertical{
+  writing-mode:vertical-rl;
+  text-orientation:mixed;
+  transform:rotate(180deg)!important;
+  white-space:nowrap;
+  width:auto;
+  height:auto;
+  line-height:.82!important;
+  letter-spacing:-.045em;
+}
+.cloud-mode .cloud-v793 .color-0{color:#07828c!important}
+.cloud-mode .cloud-v793 .color-1{color:#2e6fc2!important}
+.cloud-mode .cloud-v793 .color-2{color:#7650b7!important}
+.cloud-mode .cloud-v793 .color-3{color:#4d678b!important}
+.cloud-mode .cloud-v793 .color-4{color:#bd2788!important}
+.cloud-mode .cloud-v793 .color-5{color:#dc6b00!important}
+.cloud-mode .cloud-v793 .color-6{color:#24863c!important}
+
+/* Versione visibile in Regia */
+.admin-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.version-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:5px 10px;
+  border-radius:999px;
+  background:#e9f2ff;
+  color:#245d9f;
+  border:1px solid #c9dcf5;
+  font-size:.78rem;
+  font-weight:900;
+  letter-spacing:.02em;
+}
+
+
+/* === VotaLiveSL v8.0 - WordCloud2.js === */
+.cloud-mode .wordcloud2-host{
+  position:relative;
   width:100%;
   height:100%;
+  min-height:0;
   overflow:hidden;
+  background:transparent;
 }
-.cloud-mode .spiral-cloud .spiral-word{
-  position:absolute;
-  display:block;
-  white-space:nowrap;
-  line-height:1;
-  letter-spacing:-.02em;
-  color:var(--ink);
-  text-shadow:0 1px 0 rgba(255,255,255,.45);
-  animation:cloudIn .32s ease both;
+.cloud-mode .wordcloud2-host > span{
+  text-shadow:0 1px 0 rgba(255,255,255,.35);
+  letter-spacing:-.025em;
 }
-.cloud-mode .spiral-cloud .color-0{color:#087f89!important}
-.cloud-mode .spiral-cloud .color-1{color:#326fbd!important}
-.cloud-mode .spiral-cloud .color-2{color:#7254b6!important}
-.cloud-mode .spiral-cloud .color-3{color:#4d678a!important}
-.cloud-mode .spiral-cloud .color-4{color:#b12a86!important}
-.cloud-mode .spiral-cloud .color-5{color:#d66a00!important}
-.cloud-mode .spiral-cloud .color-6{color:#27843d!important}
