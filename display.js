@@ -139,7 +139,7 @@ function subscribeCloud(roundId) {
 }
 
 function renderCloud(arr) {
-  results.innerHTML = '<div class="display-cloud packed-cloud organic-cloud cloud-v793" id="displayCloud"></div>';
+  results.innerHTML = '<div class="display-cloud diamond-cloud packed-cloud organic-cloud" id="displayCloud"></div>';
   const cloud = document.getElementById('displayCloud');
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -154,23 +154,23 @@ function renderCloud(arr) {
     const ctx = canvas.getContext('2d');
     const fontFamily = getComputedStyle(document.body).fontFamily || 'Arial, sans-serif';
 
-    // Profilo volutamente più "a nuvola/rombo": punte strette e corpo centrale largo.
-    let rowCount = n >= 24 ? 9 : (n >= 14 ? 7 : 5);
-    if (H < 420 && rowCount > 7) rowCount = 7;
+    // Più righe per ottenere un profilo romboide irregolare, senza perdere parole.
+    let rowCount = Math.max(5, Math.min(13, Math.round(Math.sqrt(n) * 1.65)));
+    if (rowCount % 2 === 0) rowCount++;
     const center = Math.floor(rowCount / 2);
 
-    const profiles = {
-      5: [0.40, 0.72, 0.98, 0.75, 0.43],
-      7: [0.29, 0.50, 0.77, 0.99, 0.82, 0.54, 0.32],
-      9: [0.23, 0.39, 0.59, 0.81, 0.99, 0.84, 0.63, 0.43, 0.25]
-    };
-    const wobble = [0.96, 1.03, 0.98, 1.02, 1.00, 0.97, 1.04, 0.98, 1.01];
-    const rowTargets = profiles[rowCount].map((p,r) => W * p * wobble[r]);
+    // Profilo: stretto sopra/sotto, largo al centro. Una piccola irregolarità
+    // deterministica evita l'effetto ovale/tabellare.
+    const rowTargets = Array.from({length: rowCount}, (_, r) => {
+      const d = center ? Math.abs(r-center)/center : 0;
+      const diamond = 0.34 + 0.62 * Math.pow(1-d, 0.82);
+      const wobble = [0.96,1.03,0.99,1.04,0.97][r % 5];
+      return W * diamond * wobble;
+    });
 
-    // Distribuzione dal centro verso l'esterno, ma non sempre nello stesso verso:
-    // evita l'effetto "righe perfette".
     const rowPriority = [center];
     for (let d=1; d<=center; d++) {
+      // Alternanza sopra/sotto per rendere il profilo meno simmetrico.
       if (d % 2) {
         if (center-d >= 0) rowPriority.push(center-d);
         if (center+d < rowCount) rowPriority.push(center+d);
@@ -180,46 +180,57 @@ function renderCloud(arr) {
       }
     }
 
-    const baseMax = Math.min(86, Math.max(54, W * 0.052), H * 0.145);
-    const baseMin = Math.max(19, Math.min(30, baseMax * 0.36));
-    const gapX = Math.max(8, Math.min(18, W * 0.008));
-    const gapY = Math.max(3, Math.min(9, H * 0.012));
+    const baseMax = Math.min(88, Math.max(55, W * 0.056), H * 0.15);
+    const baseMin = Math.max(20, Math.min(32, baseMax * 0.38));
+    const gapX = Math.max(4, Math.min(12, W * 0.005));
+    const gapY = Math.max(2, Math.min(6, H * 0.006));
+    // Frazione di sovrapposizione verticale tra righe adiacenti (effetto più "compatto").
+    const overlapFactor = 0.16;
+
+    function hashOf(label) {
+      let hash = 0;
+      const key = canonicalWord(label).key;
+      for (let i=0; i<key.length; i++) hash = ((hash * 31) + key.charCodeAt(i)) >>> 0;
+      return hash;
+    }
 
     function weightFor(x) {
       if (maxCount === minCount) return 0.70;
       const ratio = (x.count-minCount)/(maxCount-minCount);
-      return 0.16 + 0.84 * Math.pow(ratio, 0.62);
+      return 0.18 + 0.82 * Math.pow(ratio, 0.64);
     }
 
-    // Sceglie davvero alcune parole verticali (non "forse").
-    // Mai le 5 più frequenti; preferisce termini brevi e medio-piccoli.
-    const eligible = arr
-      .map((x,idx)=>({x,idx,weight:weightFor(x)}))
-      .filter(o => o.idx >= 5 && o.x.label.length <= 12 && o.weight <= 0.58);
+    function isVertical(item) {
+      // Circa 22% dei termini, soltanto piccoli/medi e preferibilmente brevi.
+      // Scelta deterministica: non cambia mentre arrivano nuove risposte.
+      if (n < 8 || item.weight > 0.68 || item.label.length > 15) return false;
+      return (hashOf(item.label) % 100) < 22;
+    }
 
-    const verticalWanted = n >= 24 ? 4 : (n >= 14 ? 3 : (n >= 8 ? 2 : 0));
-    const verticalIndexes = new Set(
-      eligible
-        .sort((a,b) => {
-          // stabile ma irregolare
-          const ha = canonicalWord(a.x.label).key.split('').reduce((s,c)=>((s*33)+c.charCodeAt(0))>>>0,5381);
-          const hb = canonicalWord(b.x.label).key.split('').reduce((s,c)=>((s*33)+c.charCodeAt(0))>>>0,5381);
-          return (ha % 997) - (hb % 997);
-        })
-        .slice(0, verticalWanted)
-        .map(o => o.idx)
-    );
+    // Piccola inclinazione deterministica per le parole orizzontali, per rompere
+    // l'effetto "a righe" senza compromettere la leggibilità.
+    function tiltFor(item) {
+      if (item.weight > 0.55) return 0; // le parole grandi restano dritte
+      return ((hashOf(item.label) % 9) - 4) * 0.9; // circa -3.6°..+3.6°
+    }
+
+    // Sovrapposizione (in px) tra due righe adiacenti, in base alla più
+    // piccola delle due altezze. Capata per restare leggibile.
+    function rowOverlap(hA, hB) {
+      const h = Math.min(hA, hB);
+      return Math.min(h * overlapFactor, h * 0.30);
+    }
 
     function tryLayout(scale) {
       const items = arr.map((x, idx) => {
         const weight = weightFor(x);
         const size = (baseMin + (baseMax-baseMin)*weight) * scale;
-        const fw = idx < 4 ? 900 : 850;
+        const fw = idx < 3 ? 900 : 850;
         ctx.font = `${fw} ${size}px ${fontFamily}`;
         const textW = ctx.measureText(x.label).width + size*0.10;
-        const vertical = verticalIndexes.has(idx);
-        // writing-mode verticale partecipa davvero al layout: niente sovrapposizioni.
-        const width = vertical ? size * 1.02 : textW;
+        const vertical = isVertical({...x, weight});
+        // Per una parola ruotata l'ingombro orizzontale è circa la sua altezza.
+        const width = vertical ? size * 1.03 : textW;
         const height = vertical ? textW : size * 0.94;
         return {...x, idx, weight, size, fw, textW, width, height, vertical};
       });
@@ -228,67 +239,59 @@ function renderCloud(arr) {
       const used = Array(rowCount).fill(0);
 
       for (const item of items) {
-        let candidates = rowPriority.filter(r =>
-          used[r] + (rows[r].length ? gapX : 0) + item.width <= rowTargets[r]
-        );
-
+        const candidates = rowPriority
+          .filter(r => used[r] + (rows[r].length ? gapX : 0) + item.width <= rowTargets[r])
+          .sort((a,b) => {
+            const ca = Math.abs(a-center), cb = Math.abs(b-center);
+            if (ca !== cb) return ca-cb;
+            return (used[a]/rowTargets[a])-(used[b]/rowTargets[b]);
+          });
         if (!candidates.length) return null;
-
-        candidates.sort((a,b) => {
-          // Le parole grandi hanno priorità verso il centro; quelle piccole
-          // riempiono anche le punte per dare la forma a rombo.
-          const centralBiasA = item.weight > 0.55 ? Math.abs(a-center)*0.28 : 0;
-          const centralBiasB = item.weight > 0.55 ? Math.abs(b-center)*0.28 : 0;
-          const fillA = used[a] / rowTargets[a] + centralBiasA;
-          const fillB = used[b] / rowTargets[b] + centralBiasB;
-          return fillA - fillB;
-        });
-
         const r = candidates[0];
         rows[r].push(item);
         used[r] += (rows[r].length > 1 ? gapX : 0) + item.width;
       }
 
-      // Pretendiamo che le righe estreme siano realmente utilizzate quando ci sono
-      // molte parole, altrimenti il profilo torna ovale.
-      if (n >= 24 && (!rows[0].length || !rows[rowCount-1].length)) return null;
-
       const heights = rows.map(row => row.length ? Math.max(...row.map(x=>x.height)) : 0);
-      const totalH = heights.reduce((a,b)=>a+b,0) + gapY * Math.max(0,rowCount-1);
-      if (totalH > H * 0.93) return null;
+      const activeHeights = rows.map((row,r)=>heights[r]).filter((h,r)=>rows[r].length);
+      let totalH = activeHeights.length ? activeHeights[0] : 0;
+      for (let i=1; i<activeHeights.length; i++) {
+        totalH += gapY + activeHeights[i] - rowOverlap(activeHeights[i-1], activeHeights[i]);
+      }
+      if (totalH > H * 0.94) return null;
       return {rows, heights, totalH};
     }
 
     let scale = 1;
     let layout = tryLayout(scale);
-    while (!layout && scale > 0.34) {
-      scale -= scale > 0.60 ? 0.035 : 0.022;
+    while (!layout && scale > 0.30) {
+      scale -= scale > 0.55 ? 0.035 : 0.025;
       layout = tryLayout(scale);
     }
 
     if (!layout) {
-      // Fallback sicuro: nessuna parola sparisce.
+      // Fallback sicuro: tutte le parole, mai tagliate o eliminate.
       cloud.classList.add('packed-cloud-fallback');
       cloud.innerHTML = arr.map((x,i) =>
-        `<span class="packed-word color-${i%7}" style="font-size:clamp(15px,1.3vw,24px)">${esc(x.label)}</span>`
+        `<span class="packed-word color-${i%7}" style="font-size:clamp(15px,1.35vw,25px)">${esc(x.label)}</span>`
       ).join('');
       return;
     }
 
-    const staggerPattern = [-10, 16, -22, 9, 0, -13, 20, -7, 12];
-    cloud.innerHTML = layout.rows.map((row,r) => {
+    const active = layout.rows.map((row,r)=>({row,r})).filter(x=>x.row.length);
+    cloud.innerHTML = active.map(({row,r},i) => {
       const dist = Math.abs(r-center);
-      const stagger = staggerPattern[r] * Math.min(1, W/1450);
+      const staggerPattern = [0, -18, 11, -8, 16, -12, 7];
+      const stagger = staggerPattern[r % staggerPattern.length] * Math.min(1, W/1500);
+      const marginTop = i === 0 ? 0 : gapY - rowOverlap(layout.heights[active[i-1].r], layout.heights[r]);
       const words = row.map((x,j) => {
+        const lift = x.vertical ? 0 : (((x.idx * 7 + j * 3) % 5 - 2) * Math.min(2.0, x.size*0.022));
+        const tilt = x.vertical ? 0 : tiltFor(x);
         const cls = `display-cloud-word packed-word color-${x.idx%7}${x.vertical?' word-vertical':''}`;
-        const lift = x.vertical ? 0 : (((x.idx*5 + j*7) % 5)-2) * Math.min(1.7, x.size*0.018);
-        const style = x.vertical
-          ? `font-size:${x.size.toFixed(1)}px;font-weight:${x.fw}`
-          : `font-size:${x.size.toFixed(1)}px;font-weight:${x.fw};transform:translateY(${lift.toFixed(1)}px)`;
-        return `<span class="${cls}" title="${x.count}" style="${style}">${esc(x.label)}</span>`;
+        const transform = x.vertical ? 'rotate(-90deg)' : `translateY(${lift.toFixed(1)}px) rotate(${tilt.toFixed(1)}deg)`;
+        return `<span class="${cls}" title="${x.count}" style="font-size:${x.size.toFixed(1)}px;font-weight:${x.fw};transform:${transform}">${esc(x.label)}</span>`;
       }).join('');
-
-      return `<div class="packed-row cloud-row-${r} cloud-row-dist-${dist}" style="width:${rowTargets[r].toFixed(0)}px;transform:translateX(${stagger.toFixed(1)}px)">${words}</div>`;
+      return `<div class="packed-row packed-row-${dist}" style="max-width:${rowTargets[r].toFixed(0)}px;margin-top:${marginTop.toFixed(1)}px;transform:translateX(${stagger.toFixed(1)}px)">${words}</div>`;
     }).join('');
   }));
 }
