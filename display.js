@@ -62,7 +62,7 @@ function renderChoice(d) {
   const opts = d.options || [];
   const total = counts.reduce((a,b)=>a+b,0);
   const max = Math.max(0,...counts);
-  message.innerHTML = `<strong class="voter-total">${total}</strong> votanti`;
+  message.textContent = '';
   results.innerHTML = opts.map((o,i) => {
     const n = counts[i] || 0;
     const p = total ? Math.round(n*100/total) : 0;
@@ -70,7 +70,7 @@ function renderChoice(d) {
     return `<div class="verdict-row${winner?' winner':''}">
       <div class="verdict-top">
         <div class="verdict-label">${esc(o)}</div>
-        <div class="verdict-number"><strong>${p}%</strong><span>${n} ${n===1?'voto':'voti'}</span></div>
+        <div class="verdict-number"><strong>${p}%</strong></div>
       </div>
       <div class="verdict-bar"><i data-width="${p}"></i></div>
     </div>`;
@@ -115,12 +115,10 @@ function subscribeCloud(roundId) {
   unsubCloud = onSnapshot(qq, snap => {
     if (roundId !== lastRound) return;
     const freq = {};
-    let wordTotal = 0;
     snap.docs.forEach(x => {
       wordsFromDoc(x.data()).forEach(raw => {
         const {label,key} = canonicalWord(raw);
         if (!key) return;
-        wordTotal++;
         if (!freq[key]) freq[key] = {label,count:0};
         // Preferisce la grafia accentata se compare almeno una volta.
         if (/[^\x00-\x7F]/.test(label)) freq[key].label = label;
@@ -128,8 +126,7 @@ function subscribeCloud(roundId) {
       });
     });
     const arr = Object.values(freq).sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label,'it'));
-    const participants = snap.size;
-    message.innerHTML = `<strong class="voter-total">${participants}</strong> ${participants===1?'partecipante':'partecipanti'} · <strong>${wordTotal}</strong> ${wordTotal===1?'parola':'parole'}`;
+    message.textContent = '';
     if (!arr.length) {
       results.innerHTML = '<div class="cloud-empty">In attesa delle prime parole…</div>';
       return;
