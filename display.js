@@ -18,6 +18,7 @@ onSnapshot(ref, snap => {
   if (!snap.exists()) {
     setMode('holding');
     question.textContent = 'Sessione non configurata';
+    question.style.fontSize = '';
     question.style.display = '';
     message.textContent = 'Controlla il codice della sessione.';
     results.innerHTML = '';
@@ -35,6 +36,7 @@ onSnapshot(ref, snap => {
 
   question.style.display = '';
   question.textContent = d.question || 'Interazione';
+  fitQuestionLines();
 
   if (d.type === 'wordcloud') {
     if (!d.showResults) {
@@ -59,6 +61,47 @@ onSnapshot(ref, snap => {
   renderChoice(d);
 });
 
+
+function fitQuestionLines() {
+  question.style.whiteSpace = 'pre';
+  question.style.textWrap = 'nowrap';
+
+  const lines = (question.textContent || '').split('\n');
+  if (!lines.length) return;
+
+  const parent = question.parentElement;
+  const available = Math.max(300, (parent?.clientWidth || window.innerWidth) - 220);
+
+  let size = Math.min(92, Math.max(46, window.innerWidth * 0.052));
+  question.style.fontSize = `${size}px`;
+
+  const probe = document.createElement('span');
+  probe.style.position = 'absolute';
+  probe.style.visibility = 'hidden';
+  probe.style.whiteSpace = 'pre';
+  probe.style.fontFamily = getComputedStyle(question).fontFamily;
+  probe.style.fontWeight = getComputedStyle(question).fontWeight;
+  document.body.appendChild(probe);
+
+  function longestWidth(px) {
+    probe.style.fontSize = `${px}px`;
+    let max = 0;
+    for (const line of lines) {
+      probe.textContent = line || ' ';
+      max = Math.max(max, probe.getBoundingClientRect().width);
+    }
+    return max;
+  }
+
+  while (size > 34 && longestWidth(size) > available) {
+    size -= 2;
+  }
+
+  question.style.fontSize = `${size}px`;
+  question.style.lineHeight = '1.05';
+  probe.remove();
+}
+
 function setMode(mode) {
   document.body.classList.remove('holding','show-results','cloud-mode','image-mode');
   document.body.classList.add(mode);
@@ -81,6 +124,7 @@ function renderImage(d) {
   if (!d.showResults || !d.imageData) {
     question.style.display = '';
     question.textContent = 'In attesa…';
+    question.style.fontSize = '';
     message.textContent = 'La prossima interazione apparirà qui.';
     results.innerHTML = '';
     return;
@@ -88,6 +132,7 @@ function renderImage(d) {
 
   question.style.display = '';
   question.textContent = d.question || 'Immagine';
+  fitQuestionLines();
   message.textContent = '';
 
   results.innerHTML = `
