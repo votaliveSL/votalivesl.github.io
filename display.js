@@ -36,7 +36,7 @@ onSnapshot(ref, snap => {
 
   question.style.display = '';
   question.textContent = d.question || 'Interazione';
-  fitQuestionLines();
+  fitQuestionLines(54);
 
   if (d.type === 'wordcloud') {
     if (!d.showResults) {
@@ -62,7 +62,7 @@ onSnapshot(ref, snap => {
 });
 
 
-function fitQuestionLines() {
+function fitQuestionLines(maxPx=54) {
   question.style.whiteSpace = 'pre';
   question.style.textWrap = 'nowrap';
 
@@ -72,7 +72,7 @@ function fitQuestionLines() {
   const parent = question.parentElement;
   const available = Math.max(300, (parent?.clientWidth || window.innerWidth) - 220);
 
-  let size = Math.min(92, Math.max(46, window.innerWidth * 0.052));
+  let size = Math.max(28, Math.min(90, Number(maxPx) || 54));
   question.style.fontSize = `${size}px`;
 
   const probe = document.createElement('span');
@@ -93,7 +93,7 @@ function fitQuestionLines() {
     return max;
   }
 
-  while (size > 34 && longestWidth(size) > available) {
+  while (size > 28 && longestWidth(size) > available) {
     size -= 2;
   }
 
@@ -132,7 +132,7 @@ function renderImage(d) {
 
   question.style.display = '';
   question.textContent = d.question || 'Immagine';
-  fitQuestionLines();
+  fitQuestionLines(d.titleFontSize || 54);
   message.textContent = '';
 
   results.innerHTML = `
