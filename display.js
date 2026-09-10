@@ -85,12 +85,14 @@ function renderImage(d) {
     return;
   }
 
-  question.style.display = 'none';
+  question.style.display = '';
+  question.textContent = d.question || 'Immagine';
   message.textContent = '';
+
   results.innerHTML = `
     <div style="
       width:100%;
-      height:78vh;
+      height:72vh;
       display:flex;
       align-items:center;
       justify-content:center;
