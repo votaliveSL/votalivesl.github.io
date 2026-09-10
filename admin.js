@@ -4,6 +4,7 @@ import { firebaseConfig } from './firebase-config.js';
 
 const db = getFirestore(initializeApp(firebaseConfig));
 const q = id => document.getElementById(id);
+
 let currentSession = q('sessionInput').value.trim();
 let unsub = null;
 let unsubHistory = null;
@@ -13,6 +14,8 @@ let unsubAgenda = null;
 let agendaItems = [];
 let selectedAgendaId = null;
 let currentSessionData = null;
+let imageDataUrl = '';
+
 const sessionRef = () => doc(db,'sessions',currentSession);
 const roundRef = roundId => doc(db,'sessions',currentSession,'rounds',roundId);
 const roundsRef = () => collection(db,'sessions',currentSession,'rounds');
@@ -21,13 +24,90 @@ const agendaItemRef = id => doc(db,'sessions',currentSession,'agenda',id);
 const options = () => q('optionsInput').value.split('\n').map(x=>x.trim()).filter(Boolean);
 
 function typeUI() {
-  const isChoice = q('typeInput').value === 'choice';
+  const type = q('typeInput').value;
+  const isChoice = type === 'choice';
+  const isCloud = type === 'wordcloud';
+  const isImage = type === 'image';
+
   q('optionsWrap').style.display = isChoice ? 'block' : 'none';
-  const help = q('wordCloudHelp');
-  if (help) help.style.display = isChoice ? 'none' : 'block';
+  q('wordCloudHelp').style.display = isCloud ? 'block' : 'none';
+  q('imageUploadWrap').classList.toggle('hidden', !isImage);
+  q('revealToggleWrap').classList.toggle('hidden', isImage);
+  q('resetBtn').classList.toggle('hidden', isImage);
+
+  q('questionLabel').textContent = isImage ? 'Titolo in scaletta' : 'Domanda';
+  q('openBtn').textContent = isImage ? 'Mostra' : 'Apri';
+  q('closeBtn').textContent = isImage ? 'Nascondi' : 'Chiudi';
 }
+
 q('typeInput').onchange = typeUI;
 typeUI();
+
+function setImagePreview(dataUrl='') {
+  imageDataUrl = dataUrl || '';
+  q('imagePreview').innerHTML = imageDataUrl
+    ? `<img src="${imageDataUrl}" alt="Anteprima immagine">`
+    : '<span class="muted">Nessuna immagine selezionata</span>';
+}
+
+q('imageInput').onchange = async e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    setAgendaStatus('Preparazione immagine…');
+    const dataUrl = await compressImage(file);
+    setImagePreview(dataUrl);
+    setAgendaStatus('Immagine pronta.');
+  } catch (err) {
+    console.error(err);
+    setAgendaStatus('Impossibile elaborare l’immagine.', true);
+  }
+};
+
+async function compressImage(file) {
+  if (!file.type.startsWith('image/')) throw new Error('File non immagine');
+
+  const bitmap = await createImageBitmap(file);
+  const MAX_SIDE = 1600;
+  const ratio = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * ratio));
+  const h = Math.max(1, Math.round(bitmap.height * ratio));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,w,h);
+  ctx.drawImage(bitmap,0,0,w,h);
+  bitmap.close?.();
+
+  let quality = 0.84;
+  let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+  while (dataUrl.length > 700000 && quality > 0.48) {
+    quality -= 0.08;
+    dataUrl = canvas.toDataURL('image/jpeg', quality);
+  }
+
+  if (dataUrl.length > 850000) {
+    const scale = Math.sqrt(700000 / dataUrl.length);
+    const w2 = Math.max(1, Math.round(w * scale));
+    const h2 = Math.max(1, Math.round(h * scale));
+    const c2 = document.createElement('canvas');
+    c2.width = w2;
+    c2.height = h2;
+    const x2 = c2.getContext('2d');
+    x2.fillStyle = '#ffffff';
+    x2.fillRect(0,0,w2,h2);
+    x2.drawImage(canvas,0,0,w2,h2);
+    dataUrl = c2.toDataURL('image/jpeg', 0.72);
+  }
+
+  if (dataUrl.length > 900000) throw new Error('Immagine ancora troppo grande');
+  return dataUrl;
+}
 
 function subscribe() {
   if (unsub) unsub();
@@ -39,11 +119,15 @@ function subscribe() {
     if (!snap.exists()) return render(null,[]);
     const d = snap.data();
     currentSessionData = d;
-    q('questionInput').value = d.question || '';
-    q('typeInput').value = d.type || 'choice';
-    typeUI();
-    if (d.options?.length) q('optionsInput').value = d.options.join('\n');
-    q('showResults').checked = !!d.showResults;
+
+    if (d.type !== 'image') {
+      q('questionInput').value = d.question || '';
+      q('typeInput').value = d.type || 'choice';
+      if (d.options?.length) q('optionsInput').value = d.options.join('\n');
+      q('showResults').checked = !!d.showResults;
+      typeUI();
+    }
+
     if (d.type === 'wordcloud') subscribeWords(d.roundId);
     else {
       if (unsubWords) { unsubWords(); unsubWords = null; activeCloudRound = null; }
@@ -78,11 +162,31 @@ q('sessionInput').onchange = () => {
 
 async function saveDraft() {
   const type = q('typeInput').value;
+
+  if (type === 'image') {
+    const data = currentInteractionPayload();
+    if (!validateInteraction(data)) return;
+    await setDoc(sessionRef(),{
+      question:data.question,
+      type:'image',
+      imageData:data.imageData,
+      options:[],
+      counts:[],
+      isOpen:false,
+      showResults:false,
+      roundId:null,
+      agendaId:null,
+      updatedAt:serverTimestamp()
+    },{merge:true});
+    return;
+  }
+
   const opts = type === 'choice' ? options() : [];
   await setDoc(sessionRef(),{
     question:q('questionInput').value.trim(),
     type,
     options:opts,
+    imageData:'',
     isOpen:false,
     showResults:false,
     updatedAt:serverTimestamp()
@@ -91,12 +195,22 @@ async function saveDraft() {
 
 async function openRound(agendaId=null) {
   const type = q('typeInput').value;
+  if (type === 'image') {
+    await showImage({
+      id: agendaId || null,
+      question:q('questionInput').value.trim(),
+      imageData:imageDataUrl
+    });
+    return;
+  }
+
   const opts = type === 'choice' ? options() : [];
   const roundId = crypto.randomUUID();
   const payload = {
     question:q('questionInput').value.trim(),
     type,
     options:opts,
+    imageData:'',
     counts:opts.map(()=>0),
     isOpen:true,
     showResults:false,
@@ -121,10 +235,39 @@ async function openRound(agendaId=null) {
   });
 }
 
+async function showImage(item) {
+  if (!item?.imageData) {
+    alert('Questa voce non contiene un’immagine.');
+    return;
+  }
+  await setDoc(sessionRef(),{
+    question:item.question || 'Immagine',
+    type:'image',
+    imageData:item.imageData,
+    options:[],
+    counts:[],
+    isOpen:false,
+    showResults:true,
+    roundId:null,
+    agendaId:item.id || null,
+    updatedAt:serverTimestamp()
+  },{merge:true});
+}
+
 async function closeRound() {
   const snap = await getDoc(sessionRef());
   if (!snap.exists()) return;
   const d = snap.data();
+
+  if (d.type === 'image') {
+    await updateDoc(sessionRef(),{
+      showResults:false,
+      isOpen:false,
+      updatedAt:serverTimestamp()
+    });
+    return;
+  }
+
   if (!d.roundId) {
     await updateDoc(sessionRef(),{isOpen:false,updatedAt:serverTimestamp()});
     return;
@@ -155,14 +298,15 @@ q('saveBtn').onclick = saveDraft;
 q('openBtn').onclick = () => openRound(null);
 q('closeBtn').onclick = closeRound;
 q('showResults').onchange = () => updateDoc(sessionRef(),{showResults:q('showResults').checked,updatedAt:serverTimestamp()});
+
 async function resetResponses() {
   const snap = await getDoc(sessionRef());
   if (!snap.exists()) return;
   const d = snap.data();
-  const oldRoundId = d.roundId;
+  if (d.type === 'image') return;
 
+  const oldRoundId = d.roundId;
   if (oldRoundId) {
-    // Congela la tornata esistente prima di azzerarla, così non si perde dallo storico.
     let archived = {
       question:d.question || '', type:d.type || 'choice', options:d.options || [],
       counts:d.counts || [], total:(d.counts || []).reduce((a,b)=>a+b,0),
@@ -194,8 +338,6 @@ async function resetResponses() {
 }
 q('resetBtn').onclick = resetResponses;
 
-
-
 function setAgendaStatus(message, isError=false) {
   const el = q('agendaStatus');
   if (!el) return;
@@ -209,13 +351,24 @@ function currentInteractionPayload() {
   return {
     question:q('questionInput').value.trim(),
     type,
-    options:type === 'choice' ? options() : []
+    options:type === 'choice' ? options() : [],
+    imageData:type === 'image' ? imageDataUrl : ''
   };
 }
 
 function validateInteraction(data) {
-  if (!data.question) { alert('Inserisci prima la domanda.'); return false; }
-  if (data.type === 'choice' && data.options.length < 2) { alert('Inserisci almeno due opzioni di risposta.'); return false; }
+  if (!data.question) {
+    alert(data.type === 'image' ? 'Inserisci un titolo per l’immagine.' : 'Inserisci prima la domanda.');
+    return false;
+  }
+  if (data.type === 'choice' && data.options.length < 2) {
+    alert('Inserisci almeno due opzioni di risposta.');
+    return false;
+  }
+  if (data.type === 'image' && !data.imageData) {
+    alert('Seleziona prima un’immagine.');
+    return false;
+  }
   return true;
 }
 
@@ -227,6 +380,7 @@ q('agendaAddBtn').onclick = async () => {
   btn.disabled = true;
   btn.textContent = 'Salvataggio…';
   setAgendaStatus('Salvataggio nella scaletta…');
+
   try {
     const id = crypto.randomUUID();
     const maxOrder = agendaItems.reduce((m,x)=>Math.max(m,Number(x.order)||0),0);
@@ -236,10 +390,10 @@ q('agendaAddBtn').onclick = async () => {
       createdAt:serverTimestamp(),
       updatedAt:serverTimestamp()
     });
-    setAgendaStatus('Interazione aggiunta alla scaletta.');
+    setAgendaStatus(data.type === 'image' ? 'Immagine aggiunta alla scaletta.' : 'Interazione aggiunta alla scaletta.');
   } catch (err) {
     console.error('Errore aggiunta scaletta:', err);
-    setAgendaStatus('Errore Firebase: ' + (err?.message || 'interazione non salvata'), true);
+    setAgendaStatus('Errore Firebase: ' + (err?.message || 'elemento non salvato'), true);
   } finally {
     btn.disabled = false;
     btn.textContent = oldText;
@@ -259,6 +413,7 @@ q('agendaCancelBtn').onclick = clearAgendaSelection;
 function clearAgendaSelection() {
   selectedAgendaId = null;
   q('agendaEditBar').classList.add('hidden');
+  setImagePreview('');
   renderAgenda();
 }
 
@@ -266,17 +421,30 @@ function loadAgendaItem(item, markSelected=true, scrollToEditor=true) {
   q('questionInput').value = item.question || '';
   q('typeInput').value = item.type || 'choice';
   q('optionsInput').value = (item.options || []).join('\n');
+  setImagePreview(item.type === 'image' ? (item.imageData || '') : '');
+  q('imageInput').value = '';
   typeUI();
+
   if (markSelected) {
     selectedAgendaId = item.id;
     q('agendaEditBar').classList.remove('hidden');
   }
+
   renderAgenda();
   const editor = q('newInteractionSection');
-  if (editor && scrollToEditor) { editor.open = true; editor.scrollIntoView({behavior:'smooth',block:'start'}); }
+  if (editor && scrollToEditor) {
+    editor.open = true;
+    editor.scrollIntoView({behavior:'smooth',block:'start'});
+  }
 }
 
 async function openAgendaItem(item) {
+  if (item.type === 'image') {
+    selectedAgendaId = null;
+    q('agendaEditBar').classList.add('hidden');
+    await showImage(item);
+    return;
+  }
   loadAgendaItem(item,false,false);
   selectedAgendaId = null;
   q('agendaEditBar').classList.add('hidden');
@@ -312,28 +480,52 @@ function isCurrentAgendaItem(item) {
 function renderAgenda() {
   const el = q('agenda');
   if (!el) return;
+
   if (!agendaItems.length) {
     el.innerHTML = '<p class="muted agenda-empty">La scaletta è vuota. Apri “NUOVA Interazione” in fondo alla pagina per crearne una.</p>';
     return;
   }
+
   el.innerHTML = agendaItems.map((item,i) => {
     const current = isCurrentAgendaItem(item);
+    const isImage = item.type === 'image';
     const revealLabel = currentSessionData?.showResults ? 'Nascondi' : 'Rivela';
-    const stateLabel = current ? (currentSessionData?.isOpen ? 'IN CORSO' : 'CARICATA') : '';
-    return `
-    <article class="agenda-item${selectedAgendaId===item.id?' selected':''}${current?' current':''}" data-id="${esc(item.id)}">
-      <div class="agenda-num">${i+1}</div>
-      <div class="agenda-main">
-        <div class="agenda-topline"><div class="agenda-type">${item.type==='wordcloud'?'WORD CLOUD':'VOTAZIONE'}</div>${current?`<span class="agenda-live-badge">${stateLabel}</span>`:''}</div>
-        <strong>${esc(item.question || 'Senza titolo')}</strong>
-        ${item.type==='choice' ? `<div class="agenda-options">${(item.options||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div>` : ''}
-      </div>
-      <div class="agenda-actions">
+    const stateLabel = current
+      ? (isImage ? (currentSessionData?.showResults ? 'IN PROIEZIONE' : 'CARICATA') : (currentSessionData?.isOpen ? 'IN CORSO' : 'CARICATA'))
+      : '';
+
+    const typeLabel = isImage ? 'IMMAGINE' : item.type === 'wordcloud' ? 'WORD CLOUD' : 'VOTAZIONE';
+
+    const imageThumb = isImage && item.imageData
+      ? `<img class="agenda-image-thumb" src="${item.imageData}" alt="">`
+      : '';
+
+    const actionButtons = isImage
+      ? `
+        <button class="agenda-open" data-action="open">Mostra</button>
+        <button class="secondary agenda-small" data-action="close" ${current?'':'disabled'}>Nascondi</button>
+        <button class="secondary agenda-small" data-action="load">Modifica</button>`
+      : `
         <button class="agenda-open" data-action="open">Apri</button>
         <button class="secondary agenda-small" data-action="close" ${current?'':'disabled'}>Chiudi</button>
         <button class="agenda-reveal agenda-small" data-action="reveal" ${current?'':'disabled'}>${revealLabel}</button>
         <button class="danger agenda-small" data-action="reset" ${current?'':'disabled'}>Azzera</button>
-        <button class="secondary agenda-small" data-action="load">Modifica</button>
+        <button class="secondary agenda-small" data-action="load">Modifica</button>`;
+
+    return `
+    <article class="agenda-item${selectedAgendaId===item.id?' selected':''}${current?' current':''}" data-id="${esc(item.id)}">
+      <div class="agenda-num">${i+1}</div>
+      <div class="agenda-main">
+        <div class="agenda-topline">
+          <div class="agenda-type">${typeLabel}</div>
+          ${current?`<span class="agenda-live-badge">${stateLabel}</span>`:''}
+        </div>
+        <strong>${esc(item.question || 'Senza titolo')}</strong>
+        ${item.type==='choice' ? `<div class="agenda-options">${(item.options||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div>` : ''}
+        ${imageThumb}
+      </div>
+      <div class="agenda-actions">
+        ${actionButtons}
         <div class="agenda-order">
           <button class="secondary agenda-icon" data-action="up" aria-label="Sposta su" ${i===0?'disabled':''}>↑</button>
           <button class="secondary agenda-icon" data-action="down" aria-label="Sposta giù" ${i===agendaItems.length-1?'disabled':''}>↓</button>
@@ -347,8 +539,13 @@ function renderAgenda() {
     const item = agendaItems[index];
     node.querySelector('[data-action="open"]').onclick = () => openAgendaItem(item);
     node.querySelector('[data-action="close"]').onclick = () => isCurrentAgendaItem(item) && closeRound();
-    node.querySelector('[data-action="reveal"]').onclick = () => isCurrentAgendaItem(item) && setReveal(!currentSessionData?.showResults);
-    node.querySelector('[data-action="reset"]').onclick = () => isCurrentAgendaItem(item) && resetResponses();
+
+    const reveal = node.querySelector('[data-action="reveal"]');
+    if (reveal) reveal.onclick = () => isCurrentAgendaItem(item) && setReveal(!currentSessionData?.showResults);
+
+    const reset = node.querySelector('[data-action="reset"]');
+    if (reset) reset.onclick = () => isCurrentAgendaItem(item) && resetResponses();
+
     node.querySelector('[data-action="load"]').onclick = () => loadAgendaItem(item,true);
     node.querySelector('[data-action="up"]').onclick = () => moveAgenda(index,-1);
     node.querySelector('[data-action="down"]').onclick = () => moveAgenda(index,1);
@@ -410,6 +607,14 @@ function wordFrequencies(words) {
 }
 
 function render(d,words) {
+  if (d?.type === 'image') {
+    q('totalVotes').textContent = '—';
+    q('results').innerHTML = d.imageData
+      ? `<div class="admin-image-live"><img src="${d.imageData}" alt="Immagine in proiezione"></div>`
+      : '<p class="muted">Nessuna immagine caricata.</p>';
+    return;
+  }
+
   if (d?.type === 'wordcloud') {
     const freq = wordFrequencies(words);
     const arr = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
@@ -426,6 +631,7 @@ function render(d,words) {
   const total = counts.reduce((a,b)=>a+b,0);
   q('totalVotes').textContent = total;
   const max = Math.max(0,...counts);
+
   q('results').innerHTML = opts.map((o,i) => {
     const n = counts[i] || 0;
     const p = total ? Math.round(n*100/total) : 0;
@@ -483,11 +689,15 @@ function timeMs(v) {
 function formatDate(v) {
   const ms = timeMs(v);
   if (!ms) return 'adesso';
-  return new Intl.DateTimeFormat('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(ms));
+  return new Intl.DateTimeFormat('it-IT',{
+    day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'
+  }).format(new Date(ms));
 }
 
 function esc(s) {
-  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
 }
 
 function updateUrls() {

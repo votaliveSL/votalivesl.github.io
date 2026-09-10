@@ -4,17 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Regia VotaLiveSL - Processo all'AI</title>
-  <link rel="stylesheet" href="style.css?v=8.0">
+  <link rel="stylesheet" href="style.css?v=8.1">
+  <style>
+    .image-upload-wrap{margin:12px 0 18px;padding:16px;border:1px solid #d0d5dd;border-radius:16px;background:#f8f9fa}
+    .image-upload-preview{min-height:120px;display:flex;align-items:center;justify-content:center;margin-top:12px;border-radius:12px;background:#fff;border:1px dashed #c9ced6;overflow:hidden}
+    .image-upload-preview img{display:block;max-width:100%;max-height:280px;object-fit:contain}
+    .agenda-image-thumb{width:110px;height:66px;object-fit:contain;background:#fff;border:1px solid #e1e4e8;border-radius:8px;margin-top:8px}
+    .admin-image-live{display:flex;justify-content:center;padding:16px;background:#f8f9fa;border-radius:16px}
+    .admin-image-live img{max-width:100%;max-height:420px;object-fit:contain;border-radius:10px}
+  </style>
 </head>
 <body>
 <main class="app wide">
   <section class="card">
     <div class="section-head agenda-head">
       <div>
-        <div class="admin-meta"><div class="eyebrow">REGIA</div><div class="version-badge">Versione v8.0</div></div>
+        <div class="admin-meta"><div class="eyebrow">REGIA</div><div class="version-badge">Versione v8.1</div></div>
         <h1 class="admin-title">Processo all'Intelligenza Artificiale</h1>
         <h2>Scaletta evento</h2>
-        <p class="muted compact">Gestisci da qui le interazioni durante il congresso. I comandi Chiudi, Rivela/Nascondi e Azzera agiscono sulla voce attualmente caricata sullo schermo.</p>
+        <p class="muted compact">Gestisci da qui votazioni, Word Cloud e immagini da proiettare tra un'interazione e l'altra.</p>
       </div>
     </div>
     <p id="agendaStatus" class="agenda-status hidden" role="status"></p>
@@ -49,7 +57,7 @@
 
   <details class="card collapsible-card" id="newInteractionSection">
     <summary class="collapsible-summary">
-      <span><strong>NUOVA Interazione</strong><small>Crea una nuova votazione o Word Cloud e aggiungila alla scaletta.</small></span>
+      <span><strong>NUOVA Interazione</strong><small>Crea una votazione, Word Cloud o immagine e aggiungila alla scaletta.</small></span>
       <span class="chevron">⌄</span>
     </summary>
     <div class="collapsible-content">
@@ -58,17 +66,35 @@
           <select id="typeInput">
             <option value="choice">Scelta / voto</option>
             <option value="wordcloud">Word Cloud</option>
+            <option value="image">Immagine</option>
           </select>
         </label>
         <label>Codice sessione
           <input id="sessionInput" value="processo-ai-2026">
         </label>
       </div>
-      <label>Domanda<input id="questionInput" value="Qual è il vostro verdetto?"></label>
-      <p id="wordCloudHelp" class="muted compact wordcloud-help">Con Word Cloud ogni partecipante può inviare fino a 3 parole o brevi espressioni, una per campo. Le risposte uguali vengono accorpate automaticamente ignorando maiuscole/minuscole.</p>
-      <label id="optionsWrap">Opzioni (una per riga)<textarea id="optionsInput" rows="5">COLPEVOLE
+
+      <label><span id="questionLabel">Domanda</span><input id="questionInput" value="Qual è il vostro verdetto?"></label>
+
+      <p id="wordCloudHelp" class="muted compact wordcloud-help">
+        Con Word Cloud ogni partecipante può inviare fino a 3 parole o brevi espressioni, una per campo.
+        Le risposte uguali vengono accorpate automaticamente ignorando maiuscole/minuscole.
+      </p>
+
+      <label id="optionsWrap">Opzioni (una per riga)
+        <textarea id="optionsInput" rows="5">COLPEVOLE
 NON COLPEVOLE
-NON HO ANCORA DECISO</textarea></label>
+NON HO ANCORA DECISO</textarea>
+      </label>
+
+      <div id="imageUploadWrap" class="image-upload-wrap hidden">
+        <label>Immagine da proiettare
+          <input id="imageInput" type="file" accept="image/*">
+        </label>
+        <p class="muted compact">L'immagine viene ridimensionata e compressa automaticamente prima del salvataggio nella scaletta.</p>
+        <div id="imagePreview" class="image-upload-preview"><span class="muted">Nessuna immagine selezionata</span></div>
+      </div>
+
       <div class="actions">
         <button id="agendaAddBtn" class="agenda-primary">Aggiungi alla scaletta</button>
         <button id="saveBtn">Salva</button>
@@ -76,7 +102,11 @@ NON HO ANCORA DECISO</textarea></label>
         <button id="closeBtn" class="secondary">Chiudi</button>
         <button id="resetBtn" class="danger">Azzera risposte</button>
       </div>
-      <label class="toggle reveal-toggle"><input type="checkbox" id="showResults"> Rivela il responso sullo schermo</label>
+
+      <label class="toggle reveal-toggle" id="revealToggleWrap">
+        <input type="checkbox" id="showResults"> Rivela il responso sullo schermo
+      </label>
+
       <div id="agendaEditBar" class="agenda-editbar hidden">
         <span>Voce caricata dalla scaletta</span>
         <div>
@@ -87,6 +117,6 @@ NON HO ANCORA DECISO</textarea></label>
     </div>
   </details>
 </main>
-<script type="module" src="admin.js?v=8.0"></script>
+<script type="module" src="admin.js?v=8.1"></script>
 </body>
 </html>

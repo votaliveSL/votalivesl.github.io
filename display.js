@@ -8,6 +8,7 @@ const ref = doc(db,'sessions',sessionId);
 const question = document.getElementById('displayQuestion');
 const message = document.getElementById('displayMessage');
 const results = document.getElementById('displayResults');
+
 let lastRound = null;
 let unsubCloud = null;
 let cloudRound = null;
@@ -16,12 +17,22 @@ onSnapshot(ref, snap => {
   if (!snap.exists()) {
     setMode('holding');
     question.textContent = 'Sessione non configurata';
+    question.style.display = '';
     message.textContent = 'Controlla il codice della sessione.';
     results.innerHTML = '';
     return;
   }
+
   const d = snap.data();
   lastRound = d.roundId;
+
+  if (d.type === 'image') {
+    stopCloud();
+    renderImage(d);
+    return;
+  }
+
+  question.style.display = '';
   question.textContent = d.question || 'Interazione';
 
   if (d.type === 'wordcloud') {
@@ -42,19 +53,62 @@ onSnapshot(ref, snap => {
     showHolding(d);
     return;
   }
+
   setMode('show-results');
   renderChoice(d);
 });
 
 function setMode(mode) {
-  document.body.classList.remove('holding','show-results','cloud-mode');
+  document.body.classList.remove('holding','show-results','cloud-mode','image-mode');
   document.body.classList.add(mode);
 }
 
 function showHolding(d) {
   results.innerHTML = '';
-  if (d.isOpen) message.innerHTML = '<span class="live-dot"></span> Votazione in corso';
-  else message.textContent = 'Votazione conclusa. Il responso sarà rivelato tra poco.';
+  question.style.display = '';
+
+  if (d.isOpen) {
+    message.innerHTML = '<span class="live-dot"></span> Votazione in corso';
+  } else {
+    message.textContent = 'Votazione conclusa. Il responso sarà rivelato tra poco.';
+  }
+}
+
+function renderImage(d) {
+  setMode('image-mode');
+
+  if (!d.showResults || !d.imageData) {
+    question.style.display = '';
+    question.textContent = 'In attesa…';
+    message.textContent = 'La prossima interazione apparirà qui.';
+    results.innerHTML = '';
+    return;
+  }
+
+  question.style.display = 'none';
+  message.textContent = '';
+  results.innerHTML = `
+    <div style="
+      width:100%;
+      height:78vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+    ">
+      <img
+        src="${d.imageData}"
+        alt=""
+        style="
+          display:block;
+          max-width:100%;
+          max-height:100%;
+          width:auto;
+          height:auto;
+          object-fit:contain;
+        "
+      >
+    </div>`;
 }
 
 function renderChoice(d) {
@@ -62,11 +116,14 @@ function renderChoice(d) {
   const opts = d.options || [];
   const total = counts.reduce((a,b)=>a+b,0);
   const max = Math.max(0,...counts);
+
   message.textContent = '';
+
   results.innerHTML = opts.map((o,i) => {
     const n = counts[i] || 0;
     const p = total ? Math.round(n*100/total) : 0;
     const winner = total > 0 && n === max;
+
     return `<div class="verdict-row${winner?' winner':''}">
       <div class="verdict-top">
         <div class="verdict-label">${esc(o)}</div>
@@ -75,8 +132,11 @@ function renderChoice(d) {
       <div class="verdict-bar"><i data-width="${p}"></i></div>
     </div>`;
   }).join('');
+
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    document.querySelectorAll('.verdict-bar i').forEach(el => el.style.width = `${el.dataset.width}%`);
+    document.querySelectorAll('.verdict-bar i').forEach(el => {
+      el.style.width = `${el.dataset.width}%`;
+    });
   }));
 }
 
@@ -92,45 +152,60 @@ function wordsFromDoc(data) {
   return one ? [one] : [];
 }
 
-// Raggruppa anche varianti come "Curiosità", "curiosita" e spazi/punteggiatura finali.
 function canonicalWord(raw) {
   const label = String(raw || '')
     .normalize('NFC')
     .replace(/^[\s"'“”‘’.,;:!?()\[\]{}]+|[\s"'“”‘’.,;:!?()\[\]{}]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+
   const key = label
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase('it');
+
   return { label, key };
 }
 
 function subscribeCloud(roundId) {
   if (!roundId) return;
   if (cloudRound === roundId && unsubCloud) return;
+
   stopCloud();
   cloudRound = roundId;
-  const qq = query(collection(db,'responses'),where('sessionId','==',sessionId),where('roundId','==',roundId));
+
+  const qq = query(
+    collection(db,'responses'),
+    where('sessionId','==',sessionId),
+    where('roundId','==',roundId)
+  );
+
   unsubCloud = onSnapshot(qq, snap => {
     if (roundId !== lastRound) return;
+
     const freq = {};
+
     snap.docs.forEach(x => {
       wordsFromDoc(x.data()).forEach(raw => {
         const {label,key} = canonicalWord(raw);
         if (!key) return;
         if (!freq[key]) freq[key] = {label,count:0};
-        // Preferisce la grafia accentata se compare almeno una volta.
         if (/[^\x00-\x7F]/.test(label)) freq[key].label = label;
         freq[key].count++;
       });
     });
-    const arr = Object.values(freq).sort((a,b)=>b.count-a.count || a.label.localeCompare(b.label,'it'));
+
+    const arr = Object.values(freq).sort(
+      (a,b)=>b.count-a.count || a.label.localeCompare(b.label,'it')
+    );
+
     message.textContent = '';
+
     if (!arr.length) {
       results.innerHTML = '<div class="cloud-empty">In attesa delle prime parole…</div>';
       return;
     }
+
     renderCloud(arr);
   });
 }
@@ -152,7 +227,6 @@ function renderCloud(arr) {
     const minCount = Math.min(...arr.map(x => x.count));
     const palette = ['#087f89','#326fbd','#7254b6','#4d678a','#bd2788','#d66a00','#27843d'];
 
-    // Colore stabile per parola: non cambia quando arrivano nuove risposte.
     function stableColor(word) {
       const key = canonicalWord(word).key;
       let h = 2166136261;
@@ -163,7 +237,6 @@ function renderCloud(arr) {
       return palette[Math.abs(h) % palette.length];
     }
 
-    // Font-size compresso: frequenze alte ben evidenti, ma senza "mangiare" la nuvola.
     function sizeForCount(count, scale) {
       if (maxCount === minCount) return 42 * scale;
       const t = (count - minCount) / (maxCount - minCount);
@@ -173,8 +246,6 @@ function renderCloud(arr) {
       return (minPx + (maxPx - minPx) * eased) * scale;
     }
 
-    // WordCloud2 lavora con [parola, peso]. Passiamo il conteggio reale e
-    // trasformiamo il peso in pixel con weightFactor.
     const list = arr.map(x => [x.label, x.count]);
 
     let scale = 1;
@@ -187,54 +258,35 @@ function renderCloud(arr) {
 
       const onStop = () => {
         const drawn = cloud.querySelectorAll('span').length;
-        // Se per mancanza di spazio la libreria non è riuscita a collocare tutto,
-        // rifacciamo la nuvola più piccola. Non accettiamo parole mancanti.
         if (drawn < arr.length && attempt < maxAttempts) {
           scale *= 0.88;
           setTimeout(draw, 20);
         }
       };
+
       cloud.addEventListener('wordcloudstop', onStop, { once: true });
 
       window.WordCloud(cloud, {
         list,
         fontFamily: 'Arial, Helvetica, sans-serif',
         fontWeight: (word, weight) => weight >= maxCount * 0.72 ? 900 : 800,
-        color: (word) => stableColor(word),
-
-        // Spazi piccoli = nuvola compatta.
+        color: word => stableColor(word),
         gridSize: Math.max(4, Math.round(Math.min(W,H) / 125)),
-
-        // Dimensioni proporzionali alla frequenza.
-        weightFactor: (weight) => sizeForCount(weight, scale),
+        weightFactor: weight => sizeForCount(weight, scale),
         minSize: 10,
-
-        // Mai fuori dallo schermo; se un singolo termine è enorme, riducilo.
         drawOutOfBound: false,
         shrinkToFit: true,
-
-        // Forma richiesta: rombo irregolare, leggermente schiacciato in verticale.
         shape: 'diamond',
         ellipticity: 0.76,
-
-        // Alcune parole verticali. Le altre restano orizzontali.
-        // min=max=90° significa che, quando ruota, ruota davvero in verticale.
         rotateRatio: arr.length >= 18 ? 0.14 : 0.10,
         minRotation: Math.PI / 2,
         maxRotation: Math.PI / 2,
         rotationSteps: 1,
-
-        // Mantiene l'ordine per frequenza: le parole principali partono dal centro.
         shuffle: false,
-
-        // Nessuna maschera/legenda: solo la nuvola.
         clearCanvas: true,
         backgroundColor: 'transparent',
         drawMask: false,
-
-        // Centro reale dell'area disponibile.
         origin: [W / 2, H / 2],
-
         wait: 0
       });
     }
@@ -242,6 +294,9 @@ function renderCloud(arr) {
     draw();
   }));
 }
+
 function esc(s) {
-  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
 }
