@@ -8,6 +8,7 @@ const ref = doc(db,'sessions',sessionId);
 const question = document.getElementById('displayQuestion');
 const message = document.getElementById('displayMessage');
 const results = document.getElementById('displayResults');
+question.style.whiteSpace = 'pre-line';
 
 let lastRound = null;
 let unsubCloud = null;
