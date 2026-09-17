@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Regia VotaLiveSL - Processo all'AI</title>
-  <link rel="stylesheet" href="style.css?v=8.5">
+  <link rel="stylesheet" href="style.css?v=8.6">
   <style>
     .image-upload-wrap{margin:12px 0 18px;padding:16px;border:1px solid #d0d5dd;border-radius:16px;background:#f8f9fa}
     .image-upload-preview{min-height:120px;display:flex;align-items:center;justify-content:center;margin-top:12px;border-radius:12px;background:#fff;border:1px dashed #c9ced6;overflow:hidden}
@@ -19,7 +19,7 @@
   <section class="card">
     <div class="section-head agenda-head">
       <div>
-        <div class="admin-meta"><div class="eyebrow">REGIA</div><div class="version-badge">Versione v8.5</div></div>
+        <div class="admin-meta"><div class="eyebrow">REGIA</div><div class="version-badge">Versione v8.6</div></div>
         <h1 class="admin-title">Processo all'Intelligenza Artificiale</h1>
         <h2>Scaletta evento</h2>
         <p class="muted compact">Gestisci da qui votazioni, Word Cloud e immagini da proiettare tra un'interazione e l'altra.</p>
@@ -67,6 +67,7 @@
             <option value="choice">Scelta / voto</option>
             <option value="wordcloud">Word Cloud</option>
             <option value="image">Immagine</option>
+            <option value="video">Video</option>
           </select>
         </label>
         <label>Codice sessione
@@ -86,6 +87,26 @@
 NON COLPEVOLE
 NON HO ANCORA DECISO</textarea>
       </label>
+
+
+      <div id="videoUploadWrap" class="image-upload-wrap hidden">
+        <label>Video nel repository
+          <input id="videoPathInput" type="text" placeholder="es. videos/introduzione.mp4">
+        </label>
+        <p class="muted compact">Carica il video nel repository (consigliata cartella <strong>videos</strong>) e indica qui il percorso. Formato consigliato: MP4 H.264/AAC.</p>
+        <label style="margin-top:14px">Dimensione titolo sullo schermo:
+          <div style="display:flex;align-items:center;gap:12px">
+            <input id="videoTitleFontSizeInput" type="range" min="32" max="90" step="2" value="54">
+            <strong id="videoTitleFontSizeValue" style="min-width:58px;text-align:right">54 px</strong>
+          </div>
+        </label>
+        <label style="margin-top:14px">Volume iniziale:
+          <div style="display:flex;align-items:center;gap:12px">
+            <input id="videoVolumeInput" type="range" min="0" max="100" step="5" value="100">
+            <strong id="videoVolumeValue" style="min-width:58px;text-align:right">100%</strong>
+          </div>
+        </label>
+      </div>
 
       <div id="imageUploadWrap" class="image-upload-wrap hidden">
         <label>Immagine da proiettare
@@ -124,6 +145,6 @@ NON HO ANCORA DECISO</textarea>
     </div>
   </details>
 </main>
-<script type="module" src="admin.js?v=8.5"></script>
+<script type="module" src="admin.js?v=8.6"></script>
 </body>
 </html>

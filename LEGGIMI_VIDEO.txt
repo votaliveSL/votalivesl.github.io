@@ -1,0 +1,16 @@
+VotaLiveSL v8.6 - VIDEO
+
+1. Nel repository crea la cartella: videos
+2. Carica i video MP4 nella cartella. Esempio: videos/introduzione.mp4
+3. In Regia: NUOVA Interazione > Video.
+4. Inserisci titolo, percorso, dimensione titolo e volume.
+5. Aggiungi alla scaletta.
+6. Comandi disponibili:
+   Mostra video = carica il video sul proiettore senza farlo partire
+   Avvia = riproduce
+   Pausa = mette in pausa
+   Riparti = torna all'inizio e riproduce
+   Termina = ferma e nasconde
+
+Il file video non viene salvato in Firestore: Firestore sincronizza soltanto il percorso e i comandi.
+Formato consigliato: MP4 H.264 con audio AAC.

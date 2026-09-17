@@ -28,16 +28,19 @@ function typeUI() {
   const isChoice = type === 'choice';
   const isCloud = type === 'wordcloud';
   const isImage = type === 'image';
+  const isVideo = type === 'video';
+  const isMedia = isImage || isVideo;
 
   q('optionsWrap').style.display = isChoice ? 'block' : 'none';
   q('wordCloudHelp').style.display = isCloud ? 'block' : 'none';
   q('imageUploadWrap').classList.toggle('hidden', !isImage);
-  q('revealToggleWrap').classList.toggle('hidden', isImage);
-  q('resetBtn').classList.toggle('hidden', isImage);
+  q('videoUploadWrap').classList.toggle('hidden', !isVideo);
+  q('revealToggleWrap').classList.toggle('hidden', isMedia);
+  q('resetBtn').classList.toggle('hidden', isMedia);
 
-  q('questionLabel').textContent = isImage ? 'Titolo in scaletta' : 'Domanda';
-  q('openBtn').textContent = isImage ? 'Mostra' : 'Apri';
-  q('closeBtn').textContent = isImage ? 'Nascondi' : 'Chiudi';
+  q('questionLabel').textContent = isMedia ? 'Titolo in scaletta' : 'Domanda';
+  q('openBtn').textContent = isImage ? 'Mostra' : isVideo ? 'Mostra video' : 'Apri';
+  q('closeBtn').textContent = isMedia ? 'Nascondi' : 'Chiudi';
 }
 
 q('typeInput').onchange = typeUI;
@@ -55,6 +58,18 @@ if (titleFontSizeInput) {
   titleFontSizeInput.addEventListener('input', updateTitleFontSizeLabel);
   updateTitleFontSizeLabel();
 }
+
+const videoTitleFontSizeInput = q('videoTitleFontSizeInput');
+const videoTitleFontSizeValue = q('videoTitleFontSizeValue');
+const videoVolumeInput = q('videoVolumeInput');
+const videoVolumeValue = q('videoVolumeValue');
+function updateVideoControlsLabels() {
+  if (videoTitleFontSizeInput && videoTitleFontSizeValue) videoTitleFontSizeValue.textContent = `${videoTitleFontSizeInput.value} px`;
+  if (videoVolumeInput && videoVolumeValue) videoVolumeValue.textContent = `${videoVolumeInput.value}%`;
+}
+videoTitleFontSizeInput?.addEventListener('input', updateVideoControlsLabels);
+videoVolumeInput?.addEventListener('input', updateVideoControlsLabels);
+updateVideoControlsLabels();
 
 function setImagePreview(dataUrl='') {
   imageDataUrl = dataUrl || '';
@@ -176,6 +191,20 @@ q('sessionInput').onchange = () => {
 async function saveDraft() {
   const type = q('typeInput').value;
 
+  if (type === 'video') {
+    const data = currentInteractionPayload();
+    if (!validateInteraction(data)) return;
+    await setDoc(sessionRef(),{
+      question:data.question, type:'video', videoPath:data.videoPath,
+      titleFontSize:Number(data.titleFontSize || 54),
+      videoVolume:Number(data.videoVolume ?? 100),
+      videoCommand:'load', videoCommandId:crypto.randomUUID(),
+      options:[], counts:[], isOpen:false, showResults:false,
+      roundId:null, agendaId:null, updatedAt:serverTimestamp()
+    },{merge:true});
+    return;
+  }
+
   if (type === 'image') {
     const data = currentInteractionPayload();
     if (!validateInteraction(data)) return;
@@ -209,6 +238,16 @@ async function saveDraft() {
 
 async function openRound(agendaId=null) {
   const type = q('typeInput').value;
+  if (type === 'video') {
+    await showVideo({
+      id:agendaId || null,
+      question:q('questionInput').value.trim(),
+      videoPath:String(q('videoPathInput')?.value || '').trim(),
+      titleFontSize:Number(q('videoTitleFontSizeInput')?.value || 54),
+      videoVolume:Number(q('videoVolumeInput')?.value || 100)
+    });
+    return;
+  }
   if (type === 'image') {
     await showImage({
       id: agendaId || null,
@@ -251,6 +290,30 @@ async function openRound(agendaId=null) {
   });
 }
 
+async function showVideo(item) {
+  if (!item?.videoPath) { alert('Questa voce non contiene un percorso video.'); return; }
+  await setDoc(sessionRef(),{
+    question:item.question || 'Video',
+    type:'video',
+    videoPath:item.videoPath,
+    titleFontSize:Number(item.titleFontSize || 54),
+    videoVolume:Number(item.videoVolume ?? 100),
+    videoCommand:'load',
+    videoCommandId:crypto.randomUUID(),
+    options:[], counts:[], isOpen:false, showResults:true,
+    roundId:null, agendaId:item.id || null, updatedAt:serverTimestamp()
+  },{merge:true});
+}
+async function sendVideoCommand(command) {
+  const snap = await getDoc(sessionRef());
+  if (!snap.exists() || snap.data().type !== 'video') return;
+  await updateDoc(sessionRef(),{
+    videoCommand:command,
+    videoCommandId:crypto.randomUUID(),
+    updatedAt:serverTimestamp()
+  });
+}
+
 async function showImage(item) {
   if (!item?.imageData) {
     alert('Questa voce non contiene un’immagine.');
@@ -276,10 +339,11 @@ async function closeRound() {
   if (!snap.exists()) return;
   const d = snap.data();
 
-  if (d.type === 'image') {
+  if (d.type === 'image' || d.type === 'video') {
     await updateDoc(sessionRef(),{
-      showResults:false,
-      isOpen:false,
+      showResults:false, isOpen:false,
+      videoCommand:d.type === 'video' ? 'stop' : (d.videoCommand || null),
+      videoCommandId:d.type === 'video' ? crypto.randomUUID() : (d.videoCommandId || null),
       updatedAt:serverTimestamp()
     });
     return;
@@ -370,7 +434,9 @@ function currentInteractionPayload() {
     type,
     options:type === 'choice' ? options() : [],
     imageData:type === 'image' ? imageDataUrl : '',
-    titleFontSize:type === 'image' ? Number(q('titleFontSizeInput')?.value || 54) : null
+    videoPath:type === 'video' ? String(q('videoPathInput')?.value || '').trim() : '',
+    titleFontSize:type === 'image' ? Number(q('titleFontSizeInput')?.value || 54) : type === 'video' ? Number(q('videoTitleFontSizeInput')?.value || 54) : null,
+    videoVolume:type === 'video' ? Number(q('videoVolumeInput')?.value || 100) : null
   };
 }
 
@@ -385,6 +451,10 @@ function validateInteraction(data) {
   }
   if (data.type === 'image' && !data.imageData) {
     alert('Seleziona prima un’immagine.');
+    return false;
+  }
+  if (data.type === 'video' && !data.videoPath) {
+    alert('Inserisci il percorso del video, per esempio videos/introduzione.mp4');
     return false;
   }
   return true;
@@ -445,6 +515,10 @@ function loadAgendaItem(item, markSelected=true, scrollToEditor=true) {
     q('titleFontSizeInput').value = String(item.titleFontSize || 54);
     updateTitleFontSizeLabel();
   }
+  if (q('videoPathInput')) q('videoPathInput').value = item.videoPath || '';
+  if (q('videoTitleFontSizeInput')) q('videoTitleFontSizeInput').value = String(item.titleFontSize || 54);
+  if (q('videoVolumeInput')) q('videoVolumeInput').value = String(item.videoVolume ?? 100);
+  updateVideoControlsLabels();
   typeUI();
 
   if (markSelected) {
@@ -465,6 +539,12 @@ async function openAgendaItem(item) {
     selectedAgendaId = null;
     q('agendaEditBar').classList.add('hidden');
     await showImage(item);
+    return;
+  }
+  if (item.type === 'video') {
+    selectedAgendaId = null;
+    q('agendaEditBar').classList.add('hidden');
+    await showVideo(item);
     return;
   }
   loadAgendaItem(item,false,false);
@@ -511,12 +591,13 @@ function renderAgenda() {
   el.innerHTML = agendaItems.map((item,i) => {
     const current = isCurrentAgendaItem(item);
     const isImage = item.type === 'image';
+    const isVideo = item.type === 'video';
     const revealLabel = currentSessionData?.showResults ? 'Nascondi' : 'Rivela';
     const stateLabel = current
-      ? (isImage ? (currentSessionData?.showResults ? 'IN PROIEZIONE' : 'CARICATA') : (currentSessionData?.isOpen ? 'IN CORSO' : 'CARICATA'))
+      ? ((isImage || isVideo) ? (currentSessionData?.showResults ? 'IN PROIEZIONE' : 'CARICATA') : (currentSessionData?.isOpen ? 'IN CORSO' : 'CARICATA'))
       : '';
 
-    const typeLabel = isImage ? 'IMMAGINE' : item.type === 'wordcloud' ? 'WORD CLOUD' : 'VOTAZIONE';
+    const typeLabel = isImage ? 'IMMAGINE' : isVideo ? 'VIDEO' : item.type === 'wordcloud' ? 'WORD CLOUD' : 'VOTAZIONE';
 
     const imageThumb = isImage && item.imageData
       ? `<img class="agenda-image-thumb" src="${item.imageData}" alt="">`
@@ -526,6 +607,14 @@ function renderAgenda() {
       ? `
         <button class="agenda-open" data-action="open">Mostra</button>
         <button class="secondary agenda-small" data-action="close" ${current?'':'disabled'}>Nascondi</button>
+        <button class="secondary agenda-small" data-action="load">Modifica</button>`
+      : isVideo
+      ? `
+        <button class="agenda-open" data-action="open">Mostra video</button>
+        <button class="secondary agenda-small" data-action="play" ${current?'':'disabled'}>▶ Avvia</button>
+        <button class="secondary agenda-small" data-action="pause" ${current?'':'disabled'}>⏸ Pausa</button>
+        <button class="secondary agenda-small" data-action="restart" ${current?'':'disabled'}>↺ Riparti</button>
+        <button class="secondary agenda-small" data-action="close" ${current?'':'disabled'}>■ Termina</button>
         <button class="secondary agenda-small" data-action="load">Modifica</button>`
       : `
         <button class="agenda-open" data-action="open">Apri</button>
@@ -561,6 +650,12 @@ function renderAgenda() {
     const item = agendaItems[index];
     node.querySelector('[data-action="open"]').onclick = () => openAgendaItem(item);
     node.querySelector('[data-action="close"]').onclick = () => isCurrentAgendaItem(item) && closeRound();
+    const play = node.querySelector('[data-action="play"]');
+    if (play) play.onclick = () => isCurrentAgendaItem(item) && sendVideoCommand('play');
+    const pause = node.querySelector('[data-action="pause"]');
+    if (pause) pause.onclick = () => isCurrentAgendaItem(item) && sendVideoCommand('pause');
+    const restart = node.querySelector('[data-action="restart"]');
+    if (restart) restart.onclick = () => isCurrentAgendaItem(item) && sendVideoCommand('restart');
 
     const reveal = node.querySelector('[data-action="reveal"]');
     if (reveal) reveal.onclick = () => isCurrentAgendaItem(item) && setReveal(!currentSessionData?.showResults);
@@ -634,6 +729,12 @@ function render(d,words) {
     q('results').innerHTML = d.imageData
       ? `<div class="admin-image-live"><img src="${d.imageData}" alt="Immagine in proiezione"></div>`
       : '<p class="muted">Nessuna immagine caricata.</p>';
+    return;
+  }
+
+  if (d?.type === 'video') {
+    q('totalVotes').textContent = '—';
+    q('results').innerHTML = `<p class="muted">Video pronto sullo schermo: <strong>${esc(d.question || 'Video')}</strong></p>`;
     return;
   }
 
