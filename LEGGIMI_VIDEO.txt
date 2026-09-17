@@ -1,11 +1,4 @@
-VotaLiveSL v8.7 - correzione riproduzione video
-
-Correzioni:
-- gestisce correttamente nomi video contenenti spazi e caratteri speciali;
-- mostra un messaggio diagnostico se il video non può essere caricato;
-- se il browser blocca l'avvio remoto con audio, prova automaticamente ad avviare il video muto;
-- sul display compare un messaggio cliccabile per abilitare l'audio una sola volta;
-- i comandi Regia restano: Mostra video, Avvia, Pausa, Riparti, Termina.
-
-Percorso del video attualmente caricato:
-videos/Video Difesa AI primo capo.mp4
+VotaLiveSL v8.8
+Solo per i VIDEO il filmato occupa tutto il display: niente intestazione, logo o margini.
+Le proporzioni sono mantenute senza tagliare il video; eventuali bande sono nere.
+Terminato il video o passando ad altra interazione, torna automaticamente il display normale.

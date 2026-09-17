@@ -183,9 +183,8 @@ function renderVideo(d) {
     return;
   }
 
-  question.style.display = '';
-  question.textContent = d.question || 'Video';
-  fitQuestionLines(d.titleFontSize || 54);
+  // Solo per i video: nessuna intestazione, filmato a pieno display.
+  question.style.display = 'none';
   message.textContent = '';
 
   // Converte "videos/Nome del file.mp4" in un URL valido anche con spazi/accenti.
@@ -198,9 +197,9 @@ function renderVideo(d) {
 
   if (!displayVideo || displayVideo.dataset.source !== originalSource) {
     results.innerHTML = `
-      <div id="videoStage" style="width:100%;height:68vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;position:relative;">
+      <div id="videoStage" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;">
         <video id="displayVideoPlayer" playsinline preload="auto"
-          style="display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;background:#000;">
+          style="display:block;width:100vw;height:100vh;max-width:none;max-height:none;object-fit:contain;background:#000;">
           <source src="${escAttr(source)}" type="video/mp4">
         </video>
         <div id="videoDiagnostic" style="display:none;position:absolute;left:20px;right:20px;bottom:20px;padding:14px 18px;background:rgba(0,0,0,.78);color:white;font:700 20px Arial,sans-serif;text-align:center;border-radius:10px;"></div>
