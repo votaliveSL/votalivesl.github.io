@@ -188,32 +188,99 @@ function renderVideo(d) {
   fitQuestionLines(d.titleFontSize || 54);
   message.textContent = '';
 
-  const source = d.videoPath;
-  if (!displayVideo || displayVideo.dataset.source !== source) {
+  // Converte "videos/Nome del file.mp4" in un URL valido anche con spazi/accenti.
+  const source = String(d.videoPath)
+    .split('/')
+    .map((part, i) => i === 0 && part === '' ? '' : encodeURIComponent(decodeURIComponent(part)))
+    .join('/');
+
+  const originalSource = String(d.videoPath);
+
+  if (!displayVideo || displayVideo.dataset.source !== originalSource) {
     results.innerHTML = `
-      <div style="width:100%;height:68vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;">
+      <div id="videoStage" style="width:100%;height:68vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;position:relative;">
         <video id="displayVideoPlayer" playsinline preload="auto"
           style="display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;background:#000;">
           <source src="${escAttr(source)}" type="video/mp4">
         </video>
+        <div id="videoDiagnostic" style="display:none;position:absolute;left:20px;right:20px;bottom:20px;padding:14px 18px;background:rgba(0,0,0,.78);color:white;font:700 20px Arial,sans-serif;text-align:center;border-radius:10px;"></div>
       </div>`;
     displayVideo = document.getElementById('displayVideoPlayer');
-    displayVideo.dataset.source = source;
+    displayVideo.dataset.source = originalSource;
     lastVideoCommandId = null;
+
+    displayVideo.addEventListener('error', () => {
+      const box = document.getElementById('videoDiagnostic');
+      if (box) {
+        box.style.display = 'block';
+        box.textContent = 'Impossibile caricare il video. Controlla percorso e formato MP4 (H.264/AAC).';
+      }
+    });
   }
 
-  displayVideo.volume = Math.max(0, Math.min(1, Number(d.videoVolume ?? 100) / 100));
+  const wantedVolume = Math.max(0, Math.min(1, Number(d.videoVolume ?? 100) / 100));
+  displayVideo.volume = wantedVolume;
+
+  function diagnostic(text, clickable=false) {
+    const box = document.getElementById('videoDiagnostic');
+    if (!box) return;
+    box.style.display = text ? 'block' : 'none';
+    box.textContent = text || '';
+    box.style.cursor = clickable ? 'pointer' : 'default';
+    box.onclick = null;
+    if (clickable) {
+      box.onclick = async () => {
+        try {
+          displayVideo.muted = false;
+          displayVideo.volume = wantedVolume;
+          await displayVideo.play();
+          diagnostic('');
+        } catch(e) {
+          diagnostic('Il browser continua a bloccare l’audio. Clicca direttamente sul video e poi usa Avvia dalla Regia.');
+        }
+      };
+    }
+  }
+
+  async function playReliably(restart=false) {
+    if (restart) {
+      try { displayVideo.currentTime = 0; } catch(e) {}
+    }
+
+    displayVideo.muted = wantedVolume === 0;
+    displayVideo.volume = wantedVolume;
+
+    try {
+      await displayVideo.play();
+      diagnostic('');
+      return;
+    } catch (err) {
+      // I browser possono bloccare play() remoto con audio.
+      // Ritenta muto: così il comando dalla Regia può comunque avviare il filmato.
+      try {
+        displayVideo.muted = true;
+        await displayVideo.play();
+        diagnostic('Video avviato senza audio dal browser. Clicca qui una volta per abilitare l’audio.', true);
+        return;
+      } catch (err2) {
+        diagnostic('Il browser ha bloccato l’avvio automatico. Clicca qui una volta, poi usa Avvia dalla Regia.', true);
+      }
+    }
+  }
 
   if (d.videoCommandId && d.videoCommandId !== lastVideoCommandId) {
     lastVideoCommandId = d.videoCommandId;
-    if (d.videoCommand === 'play') displayVideo.play().catch(()=>{});
-    else if (d.videoCommand === 'pause') displayVideo.pause();
-    else if (d.videoCommand === 'restart') {
-      displayVideo.currentTime = 0;
-      displayVideo.play().catch(()=>{});
+    if (d.videoCommand === 'play') {
+      playReliably(false);
+    } else if (d.videoCommand === 'pause') {
+      displayVideo.pause();
+      diagnostic('');
+    } else if (d.videoCommand === 'restart') {
+      playReliably(true);
     } else if (d.videoCommand === 'stop') {
       displayVideo.pause();
-      displayVideo.currentTime = 0;
+      try { displayVideo.currentTime = 0; } catch(e) {}
+      diagnostic('');
     }
   }
 }

@@ -1,16 +1,11 @@
-VotaLiveSL v8.6 - VIDEO
+VotaLiveSL v8.7 - correzione riproduzione video
 
-1. Nel repository crea la cartella: videos
-2. Carica i video MP4 nella cartella. Esempio: videos/introduzione.mp4
-3. In Regia: NUOVA Interazione > Video.
-4. Inserisci titolo, percorso, dimensione titolo e volume.
-5. Aggiungi alla scaletta.
-6. Comandi disponibili:
-   Mostra video = carica il video sul proiettore senza farlo partire
-   Avvia = riproduce
-   Pausa = mette in pausa
-   Riparti = torna all'inizio e riproduce
-   Termina = ferma e nasconde
+Correzioni:
+- gestisce correttamente nomi video contenenti spazi e caratteri speciali;
+- mostra un messaggio diagnostico se il video non può essere caricato;
+- se il browser blocca l'avvio remoto con audio, prova automaticamente ad avviare il video muto;
+- sul display compare un messaggio cliccabile per abilitare l'audio una sola volta;
+- i comandi Regia restano: Mostra video, Avvia, Pausa, Riparti, Termina.
 
-Il file video non viene salvato in Firestore: Firestore sincronizza soltanto il percorso e i comandi.
-Formato consigliato: MP4 H.264 con audio AAC.
+Percorso del video attualmente caricato:
+videos/Video Difesa AI primo capo.mp4
