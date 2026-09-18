@@ -137,6 +137,42 @@ function renderImage(d) {
     return;
   }
 
+  // Immagine scelta come TUTTO SCHERMO
+  if (d.imageFullscreen === true) {
+    question.style.display = 'none';
+    message.textContent = '';
+
+    results.innerHTML = `
+      <div style="
+        position:fixed;
+        inset:0;
+        width:100vw;
+        height:100vh;
+        z-index:99999;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        overflow:hidden;
+        background:#000;
+      ">
+        <img
+          src="${d.imageData}"
+          alt=""
+          style="
+            display:block;
+            width:100vw;
+            height:100vh;
+            max-width:none;
+            max-height:none;
+            object-fit:contain;
+            background:#000;
+          "
+        >
+      </div>`;
+    return;
+  }
+
+  // Immagine normale, comportamento attuale
   question.style.display = '';
   question.textContent = d.question || 'Immagine';
   fitQuestionLines(d.titleFontSize || 54);
