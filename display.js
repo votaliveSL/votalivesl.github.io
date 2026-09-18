@@ -194,7 +194,11 @@ function renderVideo(d) {
     .join('/');
 
   const originalSource = String(d.videoPath);
-
+const shouldLoop =
+  d.videoLoop === true ||
+  (typeof d.videoLoop !== 'boolean' &&
+   /(?:^|[_-])loop(?:[_-]|\.)/i.test(originalSource));
+  
   if (!displayVideo || displayVideo.dataset.source !== originalSource) {
     results.innerHTML = `
       <div id="videoStage" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:99999;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;">
@@ -216,7 +220,7 @@ function renderVideo(d) {
       }
     });
   }
-
+displayVideo.loop = shouldLoop;
   const wantedVolume = Math.max(0, Math.min(1, Number(d.videoVolume ?? 100) / 100));
   displayVideo.volume = wantedVolume;
 
