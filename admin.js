@@ -210,8 +210,9 @@ async function saveDraft() {
     if (!validateInteraction(data)) return;
     await setDoc(sessionRef(),{
       question:data.question,
-      type:'image',
+         type:'image',
       imageData:data.imageData,
+      imageFullscreen:!!data.imageFullscreen,
       titleFontSize:Number(data.titleFontSize || 54),
       options:[],
       counts:[],
@@ -253,6 +254,7 @@ async function openRound(agendaId=null) {
       id: agendaId || null,
       question:q('questionInput').value.trim(),
       imageData:imageDataUrl,
+      imageFullscreen:!!q('imageFullscreenInput')?.checked,
       titleFontSize:Number(q('titleFontSizeInput')?.value || 54)
     });
     return;
@@ -323,6 +325,7 @@ async function showImage(item) {
     question:item.question || 'Immagine',
     type:'image',
     imageData:item.imageData,
+    imageFullscreen:!!item.imageFullscreen,
     titleFontSize:Number(item.titleFontSize || 54),
     options:[],
     counts:[],
@@ -434,12 +437,12 @@ function currentInteractionPayload() {
     type,
     options:type === 'choice' ? options() : [],
     imageData:type === 'image' ? imageDataUrl : '',
+    imageFullscreen:type === 'image' ? !!q('imageFullscreenInput')?.checked : false,
     videoPath:type === 'video' ? String(q('videoPathInput')?.value || '').trim() : '',
     titleFontSize:type === 'image' ? Number(q('titleFontSizeInput')?.value || 54) : type === 'video' ? Number(q('videoTitleFontSizeInput')?.value || 54) : null,
     videoVolume:type === 'video' ? Number(q('videoVolumeInput')?.value || 100) : null
   };
 }
-
 function validateInteraction(data) {
   if (!data.question) {
     alert(data.type === 'image' ? 'Inserisci un titolo per l’immagine.' : 'Inserisci prima la domanda.');
@@ -511,6 +514,9 @@ function loadAgendaItem(item, markSelected=true, scrollToEditor=true) {
   q('optionsInput').value = (item.options || []).join('\n');
   setImagePreview(item.type === 'image' ? (item.imageData || '') : '');
   q('imageInput').value = '';
+    if (q('imageFullscreenInput')) {
+    q('imageFullscreenInput').checked = !!item.imageFullscreen;
+  }
   if (q('titleFontSizeInput')) {
     q('titleFontSizeInput').value = String(item.titleFontSize || 54);
     updateTitleFontSizeLabel();
